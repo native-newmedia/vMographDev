@@ -1,0 +1,974 @@
+-- modules
+-- ============================================================================
+local utf8 = require("utf8")
+local chance = require("chance")
+local matrix = self and require("matrix") or nil
+local matrixutils = self and require("vmatrixutils") or nil
+-- ============================================================================
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass("LetterDotPacker4", CT_Tool, {
+  REGS_Name          = "LetterDotPacker_4Multi",
+  REGS_Category      = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_OpIconString  = "LTPv1",
+  REGS_OpDescription = "Fills a letter shape with packed text using multiple algorithms",
+  REG_Version        = 100,
+  REG_TimeVariant    = true, -- required to disable caching of the current time parameter
+  REGB_Temporal      = true, -- ensures reliability in Resolve 15
+  REG_Unpredictable  = true,
+})
+
+function Create()
+  InAlgorithm        = self:AddInput("Algorithm", "Algorithm", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ComboControl",
+    INP_Default = 0,
+    INP_Integer = true,
+    { CCS_AddString = "Rectangle Packing" },
+    { CCS_AddString = "Poisson Disk Sampling" },
+    { CCS_AddString = "Adaptive Quadtree" },
+    { CCS_AddString = "Hybrid Approach" },
+    { CCS_AddString = "Simple Grid Fill" },
+    { CCS_AddString = "Ultra Simple Grid Fill" },
+    { CCS_AddString = "Multi Size Grid Fill" },
+    INP_DoNotifyChanged = true,
+  })
+
+  InGlobalScale      = self:AddInput("GlobalScale", "globalScale", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.1,
+    INP_MinScale = 0.01,
+    INP_MaxScale = 1,
+  })
+
+  NumRects           = self:AddInput("Number of Dots", "NumRects", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 1,
+    INP_MaxScale = 1000,
+    INP_Default = 100,
+    INP_Integer = true,
+  })
+
+  InThickness        = self:AddInput("Thickness", "Thickness", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_MinScale = 0.0,
+    INP_MaxScale = 0.1,
+    INP_Default = 0.005,
+  })
+
+  InMinDistance      = self:AddInput("Min Distance (Poisson)", "MinDistance", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 0.5,
+    INP_MaxScale = 10.0,
+    INP_Default = 3.0,
+  })
+
+  InMinSize          = self:AddInput("Min Size (Quadtree)", "MinSize", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 1,
+    INP_MaxScale = 20,
+    INP_Default = 4,
+    INP_Integer = true,
+  })
+
+  InHori_adjustment  = self:AddInput("Horizontal Adjustment", "Hori_adjustment", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = -1,
+    INP_MaxScale = 1,
+    INP_Default = 0.0,
+    PC_ControlGroup = 1,
+    PC_ControlID = 3,
+  })
+
+  InVer_adjustment   = self:AddInput("Vertical Adjustment", "Ver_adjustment", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = -1,
+    INP_MaxScale = 1,
+    INP_Default = 0,
+    PC_ControlGroup = 1,
+    PC_ControlID = 4,
+  })
+
+  GridSize           = self:AddInput("Grid Size", "GridSize", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 100,
+    INP_MinScale = 20,
+    INP_MaxScale = 200,
+    INP_Integer = true,
+  })
+
+  InResolution       = self:AddInput("Resolution", "Resolution", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 5,
+    INP_MinScale = 0.0,
+    INP_MaxScale = 10.0,
+    INP_MinAllowed = 0,
+    INP_Integer = true,
+  })
+  InSpacing          = self:AddInput("Spacing", "Spacing", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Integer = true,
+    INP_Default = 0,
+    INP_MinScale = 1,
+    INP_MaxScale = 10,
+    INP_MinAllowed = 0,
+    INP_MaxAllowed = 1e+38,
+  })
+
+  InCharacterSpacing = self:AddInput("Character Spacing", "CharacterSpacing", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Default = 0.05,
+    INP_Integer = false,
+  })
+
+
+
+  InR_bg          = self:AddInput("Red", "Red_bg ", {
+    ICS_Name           = "Color",
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 1.0,
+    INP_MaxScale       = 1.0,
+    CLRC_ShowWheel     = false,
+    IC_ControlGroup    = 4,
+    IC_ControlID       = 0,
+  })
+
+  InG_bg          = self:AddInput("Green", "Green_bg", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.9,
+    IC_ControlGroup    = 4,
+    IC_ControlID       = 1,
+  })
+
+  InB_bg          = self:AddInput("Blue", "Blue_bg", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.6,
+    IC_ControlGroup    = 4,
+    IC_ControlID       = 2,
+  })
+
+  InImage         = self:AddInput("Input", "Input", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+
+  InScriptValText = self:AddInput("ScriptVal Text", "ScriptValtext", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 2,
+  })
+
+  InGroups        = self:AddInput("JSON Text Groups", "JSONTextGroups", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 3,
+  })
+
+  Output          = self:AddOutput("Output", "Output", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+  OutScriptVal    = self:AddOutput("OutputData", "OutputData", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 2,
+  })
+end
+
+-- Utility: Normalize points to grid
+function normalize_points(points, grid_size)
+  local min_x, max_x = math.huge, -math.huge
+  local min_y, max_y = math.huge, -math.huge
+  for _, p in ipairs(points) do
+    min_x = math.min(min_x, p[1])
+    max_x = math.max(max_x, p[1])
+    min_y = math.min(min_y, p[2])
+    max_y = math.max(max_y, p[2])
+  end
+  local dx, dy = max_x - min_x, max_y - min_y
+  local norm = {}
+  for _, p in ipairs(points) do
+    local x = math.floor(((p[1] - min_x) / dx) * (grid_size - 1)) + 1
+    local y = math.floor(((p[2] - min_y) / dy) * (grid_size - 1)) + 1
+    table.insert(norm, { x = x, y = y })
+  end
+  return norm
+end
+
+-- ============================================================================
+-- ================== ALGORITHM 1: Rectangle Packing ========================
+-- ============================================================================
+
+function can_fit(shape, x, y, w, h)
+  for dy = 0, h - 1 do
+    for dx = 0, w - 1 do
+      if not shape[y + dy] or not shape[y + dy][x + dx] then return false end
+    end
+  end
+  return true
+end
+
+function mark_used(shape, x, y, w, h)
+  for dy = 0, h - 1 do
+    for dx = 0, w - 1 do shape[y + dy][x + dx] = false end
+  end
+end
+
+function pack_rectangles(shape, grid_size, count, detail)
+  local packed = {}
+  local max_attempts = count * 3
+  local placed_count = 0
+
+  for attempt = 1, max_attempts do
+    if placed_count >= count then break end
+
+    -- Adaptive sizing based on attempt number
+    local size_factor = math.max(0.3, 1.0 - (attempt / max_attempts) * 0.7)
+    local dot_size = math.max(1, math.floor(detail * size_factor))
+
+    local best_pos = find_best_fit_position(shape, grid_size, dot_size, dot_size)
+
+    if best_pos then
+      local rectShape = Shape()
+      rectShape:AddRectangle(0, dot_size, 0, dot_size, 0, 8)
+
+      table.insert(packed, {
+        x = best_pos.x,
+        y = best_pos.y,
+        w = dot_size,
+        h = dot_size,
+        origW = dot_size,
+        origH = dot_size,
+        rotated = false,
+        rectShape = rectShape,
+      })
+
+      mark_used(shape, best_pos.x, best_pos.y, dot_size, dot_size)
+      placed_count = placed_count + 1
+    end
+  end
+
+  return packed
+end
+
+function find_best_fit_position(shape, grid_size, w, h)
+  local best_pos = nil
+  local best_score = -1
+
+  for y = 1, grid_size - h do
+    for x = 1, grid_size - w do
+      if can_fit(shape, x, y, w, h) then
+        local score = calculate_fit_score(shape, x, y, w, h, grid_size)
+
+        if score > best_score then
+          best_score = score
+          best_pos = { x = x, y = y }
+        end
+      end
+    end
+  end
+
+  return best_pos
+end
+
+function calculate_fit_score(shape, x, y, w, h, grid_size)
+  local score = 0
+  local surrounding_area = 2
+
+  for dy = -surrounding_area, h + surrounding_area do
+    for dx = -surrounding_area, w + surrounding_area do
+      local check_x = x + dx
+      local check_y = y + dy
+
+      if check_x >= 1 and check_x <= grid_size and
+          check_y >= 1 and check_y <= grid_size then
+        if shape[check_y] and not shape[check_y][check_x] then
+          local distance = math.sqrt(dx * dx + dy * dy)
+          score = score + (1.0 / (distance + 1))
+        end
+      end
+    end
+  end
+
+  if x == 1 or y == 1 then score = score + 5 end
+  if x + w >= grid_size or y + h >= grid_size then score = score + 3 end
+
+  return score
+end
+
+-- ============================================================================
+-- ================ ALGORITHM 2: Poisson Disk Sampling ======================
+-- ============================================================================
+
+function poisson_disk_sampling(shape, grid_size, min_distance, max_points)
+  local points = {}
+  local active_list = {}
+  local attempts_per_point = 30
+
+  -- Find a random starting point inside the shape
+  local start_point = find_random_point_in_shape(shape, grid_size)
+  if not start_point then return {} end
+
+  table.insert(points, start_point)
+  table.insert(active_list, start_point)
+
+  while #active_list > 0 and #points < max_points do
+    local random_index = math.random(#active_list)
+    local point = active_list[random_index]
+    local found = false
+
+    for attempt = 1, attempts_per_point do
+      local angle = math.random() * 2 * math.pi
+      local radius = min_distance * (1 + math.random())
+      local new_x = point.x + radius * math.cos(angle)
+      local new_y = point.y + radius * math.sin(angle)
+
+      if is_valid_poisson_point(new_x, new_y, shape, points, min_distance, grid_size) then
+        local new_point = { x = new_x, y = new_y }
+        table.insert(points, new_point)
+        table.insert(active_list, new_point)
+        found = true
+        break
+      end
+    end
+
+    if not found then
+      table.remove(active_list, random_index)
+    end
+  end
+
+  -- Convert to rectangle format for consistency
+  local packed = {}
+  local dot_size = math.max(1, math.floor(min_distance * 0.5))
+
+  for _, point in ipairs(points) do
+    local rectShape = Shape()
+    rectShape:AddRectangle(0, dot_size, 0, dot_size, 0, 8)
+
+    table.insert(packed, {
+      x = math.floor(point.x),
+      y = math.floor(point.y),
+      w = dot_size,
+      h = dot_size,
+      origW = dot_size,
+      origH = dot_size,
+      rotated = false,
+      rectShape = rectShape,
+    })
+  end
+
+  return packed
+end
+
+function find_random_point_in_shape(shape, grid_size)
+  local max_attempts = 1000
+
+  for attempt = 1, max_attempts do
+    local x = math.random() * grid_size
+    local y = math.random() * grid_size
+    local grid_x = math.floor(x)
+    local grid_y = math.floor(y)
+
+    if grid_x >= 1 and grid_x <= grid_size and
+        grid_y >= 1 and grid_y <= grid_size and
+        shape[grid_y] and shape[grid_y][grid_x] then
+      return { x = x, y = y }
+    end
+  end
+
+  return nil
+end
+
+function is_valid_poisson_point(x, y, shape, existing_points, min_distance, grid_size)
+  -- Check bounds
+  if x < 1 or x > grid_size or y < 1 or y > grid_size then
+    return false
+  end
+
+  -- Check if inside shape
+  local grid_x = math.floor(x)
+  local grid_y = math.floor(y)
+  if not shape[grid_y] or not shape[grid_y][grid_x] then
+    return false
+  end
+
+  -- Check minimum distance to existing points
+  for _, point in ipairs(existing_points) do
+    local dx = x - point.x
+    local dy = y - point.y
+    local distance = math.sqrt(dx * dx + dy * dy)
+    if distance < min_distance then
+      return false
+    end
+  end
+
+  return true
+end
+
+-- ============================================================================
+-- ================= ALGORITHM 3: Adaptive Quadtree ========================
+-- ============================================================================
+
+function adaptive_quadtree(shape, grid_size, min_size, max_points)
+  local dots = {}
+  quadtree_fill(shape, 1, 1, grid_size, grid_size, min_size, dots, max_points)
+
+  -- Convert to rectangle format
+  local packed = {}
+  for _, dot in ipairs(dots) do
+    local rectShape = Shape()
+    rectShape:AddRectangle(0, dot.size, 0, dot.size, 0, 8)
+
+    table.insert(packed, {
+      x = math.floor(dot.x),
+      y = math.floor(dot.y),
+      w = dot.size,
+      h = dot.size,
+      origW = dot.size,
+      origH = dot.size,
+      rotated = false,
+      rectShape = rectShape,
+    })
+  end
+
+  return packed
+end
+
+function quadtree_fill(shape, x, y, width, height, min_size, dots, max_points)
+  if #dots >= max_points then return end
+  if width < min_size or height < min_size then return end
+
+  local center_x, center_y = x + width / 2, y + height / 2
+  local grid_x = math.floor(center_x)
+  local grid_y = math.floor(center_y)
+
+  -- Check if center is inside shape
+  if grid_x >= 1 and grid_x <= #shape[1] and
+      grid_y >= 1 and grid_y <= #shape and
+      shape[grid_y] and shape[grid_y][grid_x] then
+    -- Calculate dot size based on available space
+    local dot_size = math.min(width * 0.8, height * 0.8, min_size * 2)
+    dot_size = math.max(dot_size, min_size)
+
+    table.insert(dots, { x = center_x - dot_size / 2, y = center_y - dot_size / 2, size = dot_size })
+  else
+    -- Subdivide into quadrants
+    local half_w, half_h = width / 2, height / 2
+    quadtree_fill(shape, x, y, half_w, half_h, min_size, dots, max_points)
+    quadtree_fill(shape, x + half_w, y, half_w, half_h, min_size, dots, max_points)
+    quadtree_fill(shape, x, y + half_h, half_w, half_h, min_size, dots, max_points)
+    quadtree_fill(shape, x + half_w, y + half_h, half_w, half_h, min_size, dots, max_points)
+  end
+end
+
+-- ============================================================================
+-- ================= ALGORITHM 4: Hybrid Approach ==========================
+-- ============================================================================
+
+function hybrid_approach(shape, grid_size, count, detail, min_distance)
+  local packed = {}
+
+  -- Phase 1: Use quadtree for initial large-scale distribution
+  local quadtree_dots = {}
+  local large_min_size = math.max(detail * 0.2, 1.5)
+  quadtree_fill(shape, 1, 1, grid_size, grid_size, large_min_size, quadtree_dots, count * 0.6)
+
+  -- Mark quadtree areas as used
+  local modified_shape = deep_copy_shape(shape)
+  for _, dot in ipairs(quadtree_dots) do
+    local x, y, size = math.floor(dot.x), math.floor(dot.y), math.floor(dot.size)
+    mark_used(modified_shape, x, y, size, size)
+  end
+
+  -- Phase 2: Fill remaining space with smaller dots using rectangle packing
+  local remaining_count = count - #quadtree_dots
+  local small_dots = pack_rectangles(modified_shape, grid_size, remaining_count, detail * 0.7)
+
+  -- Combine results
+  for _, dot in ipairs(quadtree_dots) do
+    local rectShape = Shape()
+    rectShape:AddRectangle(0, dot.size, 0, dot.size, 0, 8)
+
+    table.insert(packed, {
+      x = math.floor(dot.x),
+      y = math.floor(dot.y),
+      w = dot.size,
+      h = dot.size,
+      origW = dot.size,
+      origH = dot.size,
+      rotated = false,
+      rectShape = rectShape,
+    })
+  end
+
+  for _, dot in ipairs(small_dots) do
+    table.insert(packed, dot)
+  end
+
+  return packed
+end
+
+function deep_copy_shape(shape)
+  local copy = {}
+  for y = 1, #shape do
+    copy[y] = {}
+    for x = 1, #shape[y] do
+      copy[y][x] = shape[y][x]
+    end
+  end
+  return copy
+end
+
+-- ============================================================================
+-- ================= ALGORITHM 5: Simple_grid_fill ==========================
+-- ============================================================================
+
+function simple_grid_fill(shape, grid_size, dot_size, spacing)
+  local packed = {}
+
+  -- Calculate step size (spacing between dot centers)
+  local step = dot_size + spacing
+
+  -- Iterate through grid in regular intervals
+  for y = 1, grid_size, step do
+    for x = 1, grid_size, step do
+      local grid_x = math.floor(x)
+      local grid_y = math.floor(y)
+
+      -- Check if this position is inside the shape
+      if grid_x >= 1 and grid_x <= grid_size and
+          grid_y >= 1 and grid_y <= grid_size and
+          shape[grid_y] and shape[grid_y][grid_x] then
+        -- Check if the entire dot fits within the shape
+        if fits_in_shape(shape, grid_x, grid_y, dot_size, grid_size) then
+          local rectShape = Shape()
+          rectShape:AddRectangle(0, dot_size, 0, dot_size, 0, 8)
+
+          table.insert(packed, {
+            x = grid_x,
+            y = grid_y,
+            w = dot_size,
+            h = dot_size,
+            origW = dot_size,
+            origH = dot_size,
+            rotated = false,
+            rectShape = rectShape,
+          })
+        end
+      end
+    end
+  end
+
+  return packed
+end
+
+function fits_in_shape(shape, start_x, start_y, size, grid_size)
+  -- Check if all pixels of the dot fit within the shape
+  for y = start_y, math.min(start_y + size - 1, grid_size) do
+    for x = start_x, math.min(start_x + size - 1, grid_size) do
+      if not shape[y] or not shape[y][x] then
+        return false
+      end
+    end
+  end
+  return true
+end
+
+-- ============================================================================
+-- ================= ALGORITHM 6: ultra_simple_grid_fill ======================
+-- ============================================================================
+-- Even simpler version - just place dots at every valid grid position
+function ultra_simple_grid_fill(shape, grid_size, dot_size)
+  local packed = {}
+
+  -- Place dots at regular intervals
+  for y = 1, grid_size - dot_size + 1, dot_size do
+    for x = 1, grid_size - dot_size + 1, dot_size do
+      -- Check if this position is inside the shape
+      if fits_in_shape(shape, x, y, dot_size, grid_size) then
+        local rectShape = Shape()
+        rectShape:AddRectangle(0, dot_size, 0, dot_size, 0, 8)
+
+        table.insert(packed, {
+          x = x,
+          y = y,
+          w = dot_size,
+          h = dot_size,
+          origW = dot_size,
+          origH = dot_size,
+          rotated = false,
+          rectShape = rectShape,
+        })
+      end
+    end
+  end
+
+  return packed
+end
+
+-- ============================================================================
+-- ================= ALGORITHM 7: multi_size_grid_fill ========================
+-- ============================================================================
+-- Multi-size grid version for more variety while staying grid-aligned
+function multi_size_grid_fill(shape, grid_size, sizes, spacing)
+  local packed = {}
+  local used = {}
+
+  -- Initialize used grid
+  for y = 1, grid_size do
+    used[y] = {}
+    for x = 1, grid_size do
+      used[y][x] = false
+    end
+  end
+
+  -- Sort sizes from largest to smallest for better packing
+  table.sort(sizes, function(a, b) return a > b end)
+
+  -- Place dots of each size
+  for _, dot_size in ipairs(sizes) do
+    local step = dot_size + spacing
+
+    for y = 1, grid_size - dot_size + 1, step do
+      for x = 1, grid_size - dot_size + 1, step do
+        -- Check if this area is available and fits in shape
+        if not is_area_used(used, x, y, dot_size) and
+            fits_in_shape(shape, x, y, dot_size, grid_size) then
+          -- Mark area as used
+          mark_area_used(used, x, y, dot_size)
+
+          local rectShape = Shape()
+          rectShape:AddRectangle(0, dot_size, 0, dot_size, 0, 8)
+
+          table.insert(packed, {
+            x = x,
+            y = y,
+            w = dot_size,
+            h = dot_size,
+            origW = dot_size,
+            origH = dot_size,
+            rotated = false,
+            rectShape = rectShape,
+          })
+        end
+      end
+    end
+  end
+
+  return packed
+end
+
+function is_area_used(used, start_x, start_y, size)
+  for y = start_y, start_y + size - 1 do
+    for x = start_x, start_x + size - 1 do
+      if used[y] and used[y][x] then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+function mark_area_used(used, start_x, start_y, size)
+  for y = start_y, start_y + size - 1 do
+    for x = start_x, start_x + size - 1 do
+      if used[y] then
+        used[y][x] = true
+      end
+    end
+  end
+end
+
+-- ============================================================================
+
+-- ============================================================================
+-- ====================== Shape Filling Utilities ===========================
+-- ============================================================================
+
+function fill_polygon(norm_points, grid_size)
+  -- First find bounding box to limit area we need to check
+  local min_x, max_x = math.huge, -math.huge
+  local min_y, max_y = math.huge, -math.huge
+  for _, p in ipairs(norm_points) do
+    min_x = math.min(min_x, p.x)
+    max_x = math.max(max_x, p.x)
+    min_y = math.min(min_y, p.y)
+    max_y = math.max(max_y, p.y)
+  end
+
+  local shape = {}
+  -- Only allocate and check within bounding box
+  for y = math.floor(min_y), math.ceil(max_y) do
+    shape[y] = shape[y] or {}
+    for x = math.floor(min_x), math.ceil(max_x) do
+      shape[y][x] = point_in_polygon(x + 0.5, y + 0.5, norm_points)
+    end
+  end
+  return shape
+end
+
+function fill_polygon_old(norm_points, grid_size)
+  local shape = {}
+  for y = 1, grid_size do
+    shape[y] = {}
+    for x = 1, grid_size do
+      shape[y][x] = false
+    end
+  end
+
+  local samples_per_cell = 2
+
+  for y = 1, grid_size do
+    for x = 1, grid_size do
+      local inside_count = 0
+      local total_samples = samples_per_cell * samples_per_cell
+
+      for sy = 0, samples_per_cell - 1 do
+        for sx = 0, samples_per_cell - 1 do
+          local sample_x = x - 0.5 + (sx + 0.5) / samples_per_cell
+          local sample_y = y - 0.5 + (sy + 0.5) / samples_per_cell
+
+          if point_in_polygon(sample_x, sample_y, norm_points) then
+            inside_count = inside_count + 1
+          end
+        end
+      end
+
+      shape[y][x] = (inside_count / total_samples) > 0.5
+    end
+  end
+
+  return shape
+end
+
+function point_in_polygon(x, y, points)
+  local inside = false
+  local j = #points
+
+  for i = 1, #points do
+    local xi, yi = points[i].x, points[i].y
+    local xj, yj = points[j].x, points[j].y
+
+    if ((yi > y) ~= (yj > y)) and
+        (x < (xj - xi) * (y - yi) / (yj - yi) + xi) then
+      inside = not inside
+    end
+    j = i
+  end
+
+  return inside
+end
+
+-- ============================================================================
+
+function convertY(y, ref_img)
+  return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+function Process(req)
+  local img          = InImage:GetValue(req)
+  local out          = img:CopyOf()
+  local algorithm    = InAlgorithm:GetValue(req).Value
+  local grid_size    = math.floor(GridSize:GetValue(req).Value)
+  local globalScale  = InGlobalScale:GetValue(req).Value
+  local char_spacing = InCharacterSpacing:GetValue(req).Value
+  local resolution   = InResolution:GetValue(req).Value
+  local thickness    = InThickness:GetValue(req).Value
+  local numRects     = NumRects:GetValue(req).Value
+  local min_distance = InMinDistance:GetValue(req).Value
+  local min_size     = InMinSize:GetValue(req).Value
+  local spacing      = InSpacing:GetValue(req).Value
+
+  local ic           = ImageChannel(out, 8)
+  local fs           = FillStyle()
+  local cs           = ChannelStyle()
+  local mat          = Matrix4()
+  ic:SetStyleFill(fs)
+
+  local r_bg             = InR_bg:GetValue(req).Value
+  local g_bg             = InG_bg:GetValue(req).Value
+  local b_bg             = InB_bg:GetValue(req).Value
+  local hori_adjust      = InHori_adjustment:GetValue(req).Value
+  local ver_adjust       = InVer_adjustment:GetValue(req).Value
+
+  local array_str_groups = InGroups:GetValue(req):GetValue() or {}
+  local tbl_Groups       = {}
+  if array_str_groups and array_str_groups ~= "" then
+    local inp_groups_tbl = array_str_groups
+    if inp_groups_tbl ~= nil and type(inp_groups_tbl) == "table" then
+      tbl_Groups = inp_groups_tbl
+    end
+  end
+
+  mat:Identity()
+
+  -- Prepare group data
+  local textData = InScriptValText:GetValue(req):GetValue() or {}
+  local normGroups = {}
+  local idx = 1
+  for _, groupSize in ipairs(tbl_Groups) do
+    local group = {}
+    for i = 1, groupSize do
+      if textData[idx] then
+        table.insert(group, textData[idx])
+      end
+      idx = idx + 1
+    end
+    table.insert(normGroups, group)
+  end
+
+
+  local dotArray = {}
+  local group_offsets = {}
+  local offsetX = 0
+  local shape_Holder = Shape()
+
+  for j = 1, #tbl_Groups do
+    local shapeBase_C = Shape()
+    local dotPositions = {}
+    -- Normalize each group separately
+    local norm = {}
+    if normGroups[j] then
+      norm = normalize_points(normGroups[j], grid_size)
+    end
+    local shapeGrid = fill_polygon(norm, grid_size)
+
+    -- Choose algorithm based on dropdown
+    local packed = {}
+    if algorithm == 0 then
+      -- Rectangle Packing
+      packed = pack_rectangles(shapeGrid, grid_size, numRects, resolution)
+    elseif algorithm == 1 then
+      -- Poisson Disk Sampling
+      packed = poisson_disk_sampling(shapeGrid, grid_size, min_distance, numRects)
+    elseif algorithm == 2 then
+      -- Adaptive Quadtree
+      packed = adaptive_quadtree(shapeGrid, grid_size, min_size, numRects)
+    elseif algorithm == 3 then
+      -- Hybrid Approach
+      packed = hybrid_approach(shapeGrid, grid_size, numRects, resolution, min_distance)
+    elseif algorithm == 4 then
+      -- Simple Grid Fill
+      packed = simple_grid_fill(shapeGrid, grid_size, resolution, spacing)
+    elseif algorithm == 5 then
+      -- Ultra Simple Grid Fill
+      packed = ultra_simple_grid_fill(shapeGrid, grid_size, resolution)
+    elseif algorithm == 6 then
+      -- Multi Size Grid Fill
+      packed = multi_size_grid_fill(shapeGrid, grid_size, { 6, 4, 2 }, spacing)
+    end
+
+
+
+    -- Calculate bounding box of packed rectangles for this group
+    local minX, maxX = math.huge, -math.huge
+    for _, rect in ipairs(packed) do
+      minX = math.min(minX, rect.x)
+      maxX = math.max(maxX, rect.x + rect.w)
+    end
+    local groupWidth = (maxX - minX) / grid_size * 2
+
+    -- Move this group to the correct position
+    local char_mat = Matrix4()
+    char_mat:Identity()
+    char_mat:Scale(-1, 1, 1.0)
+    char_mat:Move(offsetX, 0, 0)
+
+    for _, rect in ipairs(packed) do
+      local fx = ((rect.x / grid_size) * 2 - 1)
+      local fy = (1 - (rect.y / grid_size) * 2)
+      local fw = (rect.w / grid_size) * 2
+      local fh = (rect.h / grid_size) * 2
+
+      -- Draw the rectangle (dot)
+      local dotShape = Shape()
+      dotShape:AddRectangle(fx, fx + fw, fy - fh, fy, 0, 8)
+      shapeBase_C:AddShape(dotShape)
+      --shapeBase_C:AddShape(rect.rectShape)
+
+      -- Calculate center point of the dotShape
+      -- 1. Compute center of the rectangle (dot)
+      local centerX = fx + fw / 2
+      local centerY = fy - fh / 2
+      local centerZ = 0.0
+      local w = 1.0
+
+      -- 2. Build 4x1 vector using matrix module
+      local pointVec = matrix { { centerX }, { centerY }, { centerZ }, { w } }
+
+      -- 3. Convert Fusion Matrix4 (char_mat) to a Lua matrix
+      local luaMat = matrix {
+        { char_mat.n11, char_mat.n12, char_mat.n13, char_mat.n14 },
+        { char_mat.n21, char_mat.n22, char_mat.n23, char_mat.n24 },
+        { char_mat.n31, char_mat.n32, char_mat.n33, char_mat.n34 },
+        { char_mat.n41, char_mat.n42, char_mat.n43, char_mat.n44 }
+      }
+
+      -- 4. Multiply matrix with the point vector
+      local transformedVec = matrix.mul(luaMat, pointVec)
+
+      -- 5. Extract and store result (x, y, z)
+      local tx = transformedVec[1][1] + offsetX
+      local ty = transformedVec[2][1]
+      local tz = transformedVec[3][1]
+      table.insert(dotPositions, { tx, ty, tz })
+    end
+
+
+
+    shapeBase_C = shapeBase_C:TransformOfShape(char_mat)
+    shapeBase_C = shapeBase_C:OutlineOfShape(thickness, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+    shape_Holder:AddShape(shapeBase_C)
+
+    table.insert(dotArray, j, dotPositions)
+    -- Increment offsetX for next group
+    offsetX = offsetX + groupWidth + char_spacing
+  end
+
+  mat:Identity()
+  mat:Scale(globalScale, globalScale, 1.0)
+  mat:Move(0.5, convertY(0.5, img), 0)
+  mat:Move(hori_adjust, ver_adjust, 0)
+
+  cs.Color = Pixel({ R = r_bg, G = g_bg, B = b_bg, A = 1 })
+  ic:SetStyleFill(fs)
+  ic:ShapeFill(shape_Holder:TransformOfShape(mat))
+  ic:PutToImage("CM_Merge", cs)
+
+
+  OutScriptVal:Set(req, ScriptValParam(dotArray))
+
+  Output:Set(req, out)
+end
+
+function NotifyChanged(inp, param, time)
+  if inp == InFont then
+    local f = param.Value
+
+    if f == nil or string.len(f) == 0 then
+      InFont:SetSource(Text("Open Sans"), time)
+    end
+  elseif inp == InFontStyle then
+    local f = param.Value
+
+    if f == nil or string.len(f) == 0 then
+      InFontStyle:SetSource(Text("Regular"), time)
+    end
+  end
+
+  if inp == InShowInput then
+    if param.Value == 1.0 then visible = true else visible = false end
+  end
+end

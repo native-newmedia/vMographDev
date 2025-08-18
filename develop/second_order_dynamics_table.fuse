@@ -1,0 +1,243 @@
+-- Second Order Dynamics for Point Arrays in Fusion Fuse
+-- Smoothly animates tables of 2D/3D points using spring-damper physics
+
+FuRegisterClass("SecondOrderDynamicsTable", CT_Tool, {
+
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_OpIconString = "SODT",
+    REGS_OpDescription = "Second Order Dynamics for smooth animation of point arrays",
+    REG_TimeVariant = true,
+})
+
+function Create()
+    -- Input controls
+    InFrequency = self:AddInput("Frequency (f)", "Frequency", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.1,
+        INP_MaxScale = 10.0,
+    })
+
+    InDamping = self:AddInput("Damping (z)", "Damping", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 3.0,
+    })
+
+    InResponse = self:AddInput("Response (r)", "Response", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 2.0,
+        INP_MinScale = -5.0,
+        INP_MaxScale = 5.0,
+    })
+
+    InTargetPoints = self:AddInput("Target Points", "TargetPoints", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 2,
+    })
+
+    InInitialPoints = self:AddInput("Initial Points", "InitialPoints", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 1,
+    })
+
+    InPointType = self:AddInput("Point Type", "PointType", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ComboControl",
+        INP_Default = 0,
+        { CCS_AddString = "2D Points (x,y)" },
+        { CCS_AddString = "3D Points (x,y,z)" },
+    })
+
+    InSequenceStartFrame = self:AddInput("Sequence Start Frame", "SequenceStartFrame", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0,
+        INP_MinScale = 0,
+        INP_MaxScale = 100,
+        INP_MinAllowed = 0,
+        INP_MaxAllowed = 1e+38,
+        INP_Integer = true,
+    })
+
+    -- Outputs
+    OutPoints = self:AddOutput("ScriptVal Output", "ScriptValOutput", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 1
+    })
+
+    OutPointCount = self:AddOutput("Number Output", "NumberOutput", {
+        LINKID_DataType = "Number",
+        LINK_Main = 2
+    })
+end
+
+-- Internal state variables (persistent across frames)
+pointStates = {} -- stores {xp, y, yd} for each point component
+initialized = false
+
+-- Helper function to validate table input points
+function ValidatePoints(points, pointType)
+    if type(points) ~= "table" then
+        return {}
+    end
+
+    local validatedPoints = {}
+    for i, point in ipairs(points) do
+        if type(point) == "table" then
+            table.insert(validatedPoints, point)
+        end
+    end
+
+    return validatedPoints
+end
+
+-- Initialize state for a point array
+function InitializePointStates(points, initialPoints, pointType)
+    pointStates = {}
+    local dimensions = (pointType == 0) and 2 or 3
+
+    for i = 1, #points do
+        pointStates[i] = {}
+        local initialPoint = initialPoints[i] or points[i]
+
+        for d = 1, dimensions do
+            pointStates[i][d] = {
+                xp = points[i][d] or 0,   -- previous target
+                y = initialPoint[d] or 0, -- current position
+                yd = 0                    -- current velocity
+            }
+        end
+    end
+end
+
+-- Update a single point component using second-order dynamics
+function UpdatePointComponent(state, target, k1, k2, k3, T)
+    -- Estimate velocity
+    local xd = (target - state.xp) / T
+    state.xp = target
+
+    -- Integrate position by velocity
+    state.y = state.y + T * state.yd
+
+    -- Integrate velocity by acceleration
+    state.yd = state.yd + T * (target + k3 * xd - state.y - k1 * state.yd) / k2
+
+    return state.y
+end
+
+function Processxxx(req)
+end
+
+function Process(req)
+    local f = InFrequency:GetValue(req).Value
+    local z = InDamping:GetValue(req).Value
+    local r = InResponse:GetValue(req).Value
+    local targetPointsInput = InTargetPoints:GetValue(req):GetValue() or {}
+    local initialPointsInput = InInitialPoints:GetValue(req):GetValue() or {}
+    local pointType = InPointType:GetValue(req).Value
+    local sequenceStartFrame = InSequenceStartFrame:GetValue(req).Value
+
+    -- Validate input points
+    local targetPoints = ValidatePoints(targetPointsInput, pointType)
+    local initialPoints = ValidatePoints(initialPointsInput, pointType)
+
+    if #targetPoints == 0 then
+        return
+    end
+
+    -- Get time step - use frame rate instead of time input
+    local T = 1.0 / 30.0 -- Fixed timestep (30 fps)
+    -- Or better yet, use the composition's frame rate:
+    -- local T = 1.0 / comp.RenderEnd
+
+    -- Get current frame
+    local currentFrame = req.Time
+
+    -- Reset or initialize at sequence start frame or when conditions change
+    if currentFrame <= sequenceStartFrame or not initialized or #pointStates ~= #targetPoints then
+        InitializePointStates(targetPoints, initialPoints, pointType)
+        initialized = true
+    end
+
+    -- Compute dynamics constants
+    local k1 = z / (math.pi * f)
+    local k2 = 1 / ((2 * math.pi * f) * (2 * math.pi * f))
+    local k3 = r * z / (2 * math.pi * f)
+
+    -- Update each point
+    local outputPoints = {}
+    local dimensions = (pointType == 0) and 2 or 3
+
+    for i = 1, #targetPoints do
+        local outputPoint = {}
+
+        for d = 1, dimensions do
+            if pointStates[i] and pointStates[i][d] then
+                local target = targetPoints[i][d] or 0
+                outputPoint[d] = UpdatePointComponent(
+                    pointStates[i][d],
+                    target,
+                    k1, k2, k3, T
+                )
+            else
+                outputPoint[d] = targetPoints[i][d] or 0
+            end
+        end
+
+        table.insert(outputPoints, outputPoint)
+    end
+
+    -- Output results
+    OutPoints:Set(req, ScriptValParam(outputPoints))
+    OutPointCount:Set(req, Number(#outputPoints))
+end
+
+-- Example usage functions that can be called from other fuses or expressions
+
+-- Convert output to shape data for use with shape tools
+function GetAsShape()
+    -- Returns points in format suitable for Fusion shapes
+    local points = OutPoints:GetValue()
+    local shapeData = {}
+
+    for i, point in ipairs(points) do
+        table.insert(shapeData, {
+            X = point[1],
+            Y = point[2],
+            Z = point[3] or 0
+        })
+    end
+
+    return shapeData
+end
+
+-- Get specific point by index
+function GetPoint(index)
+    local points = OutPoints:GetValue()
+    return points[index] or { 0, 0, 0 }
+end
+
+-- Get interpolated point along path (t from 0 to 1)
+function GetInterpolatedPoint(t)
+    local points = OutPoints:GetValue()
+    if #points < 2 then return points[1] or { 0, 0, 0 } end
+
+    local scaledT = t * (#points - 1)
+    local index = math.floor(scaledT)
+    local frac = scaledT - index
+
+    local p1 = points[index + 1] or points[#points]
+    local p2 = points[index + 2] or points[#points]
+
+    local result = {}
+    for d = 1, #p1 do
+        result[d] = p1[d] * (1 - frac) + p2[d] * frac
+    end
+
+    return result
+end

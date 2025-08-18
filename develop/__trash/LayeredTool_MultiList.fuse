@@ -1,0 +1,134 @@
+FuRegisterClass("LayeredTool_MultiList", CT_Tool, {
+  REGS_Name          = "Layered_MergeStyleTool",
+  REGS_Category      = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_OpIconString  = "LMST",
+  REGS_OpDescription = "MultiMerge-style layer checklist with full per-row controls",
+  REG_Fuse_NoEdit    = false,
+  REG_Fuse_NoReload  = false,
+})
+
+function Create()
+  --self:AddControlPage("Layer List")
+
+  -- Default row names and values
+  local defaultNames = { "Background", "Foreground", "Mask", "Overlay", "Background", "Foreground", "Mask", "Overlay",
+    "Background", "Foreground", "Mask", "Overlay" }
+  local defaultEnabled = { 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1 } -- Third item disabled by default
+
+  -- Main CheckListControl
+  LayerList = self:AddInput("Layer List", "LayerList", {
+    LINKID_DataType       = "ScriptVal",
+    INPID_InputControl    = "CheckListControl",
+    IC_ControlGroup       = 1,
+    IC_ControlID          = 3, -- CHECKLISTCONTROL_ORDERING
+    CLC_EnableEditing     = true,
+    CLC_EnableReordering  = true,
+    CLC_EnableMultiselect = false,
+    CLC_Rows              = 2,
+    CLC_DisplayFlags      = 0, -- Normal display
+  })
+
+  -- Add / Remove Layer buttons
+  AddLayer = self:AddInput("Add Layer", "AddLayer", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ButtonControl",
+    IC_ControlID       = 1, -- CHECKLISTCONTROL_ADD
+  })
+
+  RemoveLayer = self:AddInput("Remove Layer", "RemoveLayer", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ButtonControl",
+    IC_ControlID       = 2, -- CHECKLISTCONTROL_REMOVE
+  })
+
+  -- Set up max number of initial rows (can be more with dynamic tools)
+  local maxRows = 4
+  for i = 0, maxRows - 1 do
+    self:AddInput("Enable " .. i, "Enable_" .. i, {
+      LINKID_DataType    = "Number",
+      INPID_InputControl = "CheckboxControl",
+      IC_ControlGroup    = 1,
+      IC_ControlID       = 1024 + i, -- Enabled
+    })
+
+    self:AddInput("Name " .. i, "Name_" .. i, {
+      LINKID_DataType    = "Text",
+      INPID_InputControl = "TextEditControl",
+      IC_ControlGroup    = 1,
+      IC_ControlID       = 2048 + i, -- Name
+    })
+
+    self:AddInput("Delete " .. i, "Delete_" .. i, {
+      LINKID_DataType    = "Number",
+      INPID_InputControl = "ButtonControl",
+      IC_ControlGroup    = 1,
+      IC_ControlID       = 3072 + i, -- Delete
+    })
+
+    self:AddInput("Reset " .. i, "Reset_" .. i, {
+      LINKID_DataType    = "Number",
+      INPID_InputControl = "ButtonControl",
+      IC_ControlGroup    = 1,
+      IC_ControlID       = 4096 + i, -- Reset
+    })
+
+    self:AddInput("Value " .. i, "Value_" .. i, {
+      LINKID_DataType    = "Text",
+      INPID_InputControl = "TextEditControl",
+      IC_ControlGroup    = 1,
+      IC_ControlID       = 6144 + i, -- Value
+    })
+  end
+
+  -- Dummy output image
+  OutImage = self:AddOutput("Output", "Output", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+end
+
+function OnAddToFlow()
+  local defaultRowNames = { "Layer A", "Layer B" }
+
+  -- Initialize inputs with 0-based naming
+  for i = 0, #defaultRowNames - 1 do
+    local layerIndex = i
+    local arrayIndex = i + 1 -- Lua uses 1-based arrays
+
+    self:SetInput("Enable_" .. layerIndex, 1)
+    self:SetInput("Name_" .. layerIndex, defaultRowNames[arrayIndex])
+    self:SetInput("Value_" .. layerIndex, "Default")
+  end
+
+  -- Set ordering table
+  local ordering = ScriptVal(SV_Table)
+  for i = 0, #defaultRowNames - 1 do
+    ordering[i + 1] = i -- Fusion table[1-based] = layer index(0-based)
+  end
+  self:SetInput("LayerList", ordering)
+end
+
+-- Optional processing of layer values
+function Process(req)
+  local ordering = LayerList:GetValue(req).Value
+  if not ordering then return end
+  --[[
+  print("Processing layer list:")
+  for i = 1, #ordering do
+    local row = ordering[i]
+    local enabled = self:GetInputValue(req, 1024 + row).Value
+    local name    = self:GetInputValue(req, 2048 + row).Value
+    local value   = self:GetInputValue(req, 6144 + row).Value
+
+    if enabled > 0.5 then
+      print(string.format("  [%d] ENABLED - %s : %s", row, name or "<none>", value or "<empty>"))
+    else
+      print(string.format("  [%d] DISABLED - %s", row, name or "<none>"))
+    end
+  end
+--]]
+  -- Output dummy image to avoid render errors
+  local out = Image({ IMG_Document = self.Comp, IMG_Width = 64, IMG_Height = 64 })
+  out:Fill(Pixel({ R = 0.2, G = 0.2, B = 0.2, A = 1.0 }))
+  OutImage:Set(req, out)
+end

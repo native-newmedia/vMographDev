@@ -1,0 +1,290 @@
+-- MaterialEasing.fuse
+-- Blackmagic Fusion Fuse Plugin implementing Material Design 3 easing curves
+-- with UI preview spline, remapping duration, and forward/reverse outputs
+
+FuRegisterClass("MaterialEasing", CT_Tool, {
+  REGS_Name = "MaterialEasing",
+  REGS_OpIconString = "EAS",
+  REGS_OpDescription = "Material Design 3 Easing Curve Tool",
+  REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REG_Version = 1,
+})
+
+
+
+FUSE_NAME = "MaterialEasing"
+
+-- Define easing curves using cubic bezier format: {x1, y1, x2, y2}
+local easing_curves = {
+  { 0.3,  0,    0.8,  0.15 }, -- Emphasized Accelerate
+  { 0.05, 0.7,  0.1,  1.0 },  -- Emphasized Decelerate
+  { 0.2,  0,    0,    1.0 },
+  { 0.3,  0,    1,    1 },
+  { 0,    0,    0,    1 },
+  { 0.4,  0,    0.2,  1 },
+  { 0.4,  0,    1,    1 },
+  { 0,    0,    0.2,  1 },
+  { 0.42, 1.67, 0.21, 0.9 },
+  { 0.38, 1.21, 0.22, 1.0 },
+  { 0.39, 1.29, 0.35, 0.98 },
+  { 0.31, 0.94, 0.34, 1.0 },
+  { 0.34, 0.8,  0.34, 1.0 },
+  { 0.34, 0.88, 0.34, 1.0 },
+  { 0.27, 1.06, 0.18, 1.0 },
+  { 0.27, 1.06, 0.18, 1.0 },
+  { 0.27, 1.06, 0.18, 1.0 },
+  { 0.31, 0.94, 0.34, 1.0 },
+  { 0.34, 0.8,  0.34, 1.0 },
+  { 0.34, 0.88, 0.34, 1.0 },
+}
+
+
+
+local ConnectionLabel = [[
+<table align="center" cellspacing="8">
+  <tr>
+    <td style="text-align: center;"></td>
+    <td style="text-align: center; background-color: #051626; color: white; padding: 5px; font-weight: bold;">[ ]] ..
+    FUSE_NAME .. [[ ]</td>
+    <td style="text-align: center;">  →  [ vJSONShapeRender Custom Shape ]</td>
+  </tr>
+</table>
+]]
+function Create()
+  -- [[ Creates the user interface. ]]
+  InLabelConnect = self:AddInput(ConnectionLabel, 'LabelConnect', {
+    LINKID_DataType = 'Text',
+    INPID_InputControl = 'LabelControl',
+    LBLC_MultiLine = true,
+    INP_External = false,
+    INP_Passive = true,
+    IC_ControlPage = -1,
+    IC_NoLabel = true,
+    IC_NoReset = true,
+  })
+  self:BeginControlNest("Material Easing", "MaterialEasing", true)
+
+  InTime = self:AddInput("Time", "Time", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 0.0,
+    INP_MaxScale = 1.0,
+    INP_Default = 0.0,
+    LINK_Main = 1,
+  })
+
+  InOffset = self:AddInput("Start Offset", "StartOffset", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.0,
+    INP_MinScale = 0.0,
+    INP_MaxScale = 10.0
+  })
+
+  InDuration = self:AddInput("Duration", "Duration", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 1.0,
+    INP_MinScale = 0.01,
+    INP_MaxScale = 10.0
+  })
+
+  InStartValue = self:AddInput("Start Value", "StartValue", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.0,
+    INP_MinScale = -10000,
+    INP_MaxScale = 10000,
+    LINK_Main = 2,
+  })
+
+  InEndValue = self:AddInput("End Value", "EndValue", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 1.0,
+    INP_MinScale = -10000,
+    INP_MaxScale = 10000,
+    LINK_Main = 3,
+  })
+
+  InEaseType = self:AddInput("Easing Type", "EaseType", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ComboControl",
+    INP_Integer = true,
+    INP_Default = 0,
+    { CCS_AddString = "Emphasized Accelerate" },
+    { CCS_AddString = "Emphasized Decelerate" },
+    { CCS_AddString = "Standard" },
+    { CCS_AddString = "Standard Accelerate" },
+    { CCS_AddString = "Standard Decelerate" },
+    { CCS_AddString = "Legacy" },
+    { CCS_AddString = "Legacy Accelerate" },
+    { CCS_AddString = "Legacy Decelerate" },
+    { CCS_AddString = "Expressive Fast Spatial" },
+    { CCS_AddString = "Expressive Default Spatial" },
+    { CCS_AddString = "Expressive Slow Spatial" },
+    { CCS_AddString = "Expressive Fast Effects" },
+    { CCS_AddString = "Expressive Default Effects" },
+    { CCS_AddString = "Expressive Slow Effects" },
+    { CCS_AddString = "Standard Fast Spatial" },
+    { CCS_AddString = "Standard Default Spatial" },
+    { CCS_AddString = "Standard Slow Spatial" },
+    { CCS_AddString = "Standard Fast Effects" },
+    { CCS_AddString = "Standard Default Effects" },
+    { CCS_AddString = "Standard Slow Effects" },
+    INP_DoNotifyChanged = true,
+  })
+  Inline1Separator = self:AddInput("line1Separator", "line1Separator", {
+    INPID_InputControl = "SeparatorControl",
+    IC_Visible = true,
+    INP_External = false,
+  })
+  self:BeginControlNest("Preview Curve", "PreviewCurve", false, {
+        LBLC_PickButton = false,
+    })
+  InPreviewSpline = self:AddInput("Preview Spline", "TimeSpline", {
+    LINKID_DataType = "LookUpTable",
+    INPID_InputControl = "SplineControl",
+    INPID_AddModifier = "LUTBezier",
+    ICS_Name = "",
+    SPC_SplineColor = MakeRGBA(0.8, 1, 0.6, 0.4),
+    SPC_Show = true,
+    SPC_HorizontalGridLines = 5,
+    SPC_VerticalGridLines = 3,
+    SPC_BarSize = 1,
+    SPC_Margin = 5,
+    SPCD_Height = 1,
+    SPC_ShowInOut = true,
+     IC_Visible = false,
+  })
+
+  InLabel = self:AddInput("", "Labeltbl", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "LabelControl",
+    LBLC_MultiLine = true,
+    LBLC_Wrap = true,
+    LBLC_WordWrap = true,
+    INP_External = false,
+    INP_Passive = true,
+    IC_NoLabel = true,
+    IC_NoReset = true,
+    INP_DoNotifyChanged = true,
+  })
+   self:EndControlNest()
+
+  self:EndControlNest()
+
+  OutForward = self:AddOutput("Forward Value", "ForwardValue", {
+    LINKID_DataType = "Number", LINK_Main = 1,
+  })
+
+  OutReverse = self:AddOutput("Reverse Value", "ReverseValue", {
+    LINKID_DataType = "Number", LINK_Main = 2,
+  })
+end
+
+function math.clamp(val, lower, upper)
+    assert(val and lower and upper, "not very useful error message here")
+    if lower > upper then lower, upper = upper, lower end -- swap if boundaries supplied the wrong way
+    return math.max(lower, math.min(upper, val))
+end
+
+-- Cubic Bézier interpolation function
+local function cubicBezier(t, p0, p1, p2, p3)
+  local u = 1 - t
+  return u ^ 3 * p0 + 3 * u ^ 2 * t * p1 + 3 * u * t ^ 2 * p2 + t ^ 3 * p3
+end
+
+-- Binary subdivision solve for Bezier x = t
+local function solveBezierX(t, x1, x2)
+  local t0, t1 = 0, 1
+  for i = 1, 10 do
+    local tm = (t0 + t1) * 0.5
+    local x = cubicBezier(tm, 0, x1, x2, 1)
+    if math.abs(x - t) < 1e-4 then return tm end
+    if x > t then t1 = tm else t0 = tm end
+  end
+  return (t0 + t1) * 0.5
+end
+
+local function getEasedValue(t, curve)
+  local x1, y1, x2, y2 = table.unpack(curve)
+  local bezT = solveBezierX(t, x1, x2)
+  return cubicBezier(bezT, 0, y1, y2, 1)
+end
+
+function MakeRGBA(r, g, b, a)
+  return ((((a or 1) * 255) * 256 + r * 255) * 256 + g * 255) * 256 + b * 255
+end
+
+function NotifyChanged(inp, param, time)
+  if inp == InEaseType then
+    local idx = param.Value + 1
+    local c = easing_curves[idx] or { 0, 0, 1, 1 }
+    local spline = {}
+    local resolution = 0.025
+    for i = 0, 1, resolution do
+      local eased = getEasedValue(i, c)
+      table.insert(spline, { i, eased })
+   
+
+    end
+   
+
+    local tileSize = 1
+
+    -- HTML Header
+    local html_str = ""
+    html_str = html_str .. [[
+<table align="center" style="width:200; border: 1px solid black; background-color: black;">
+<tr style="height:]] .. tostring(200) .. [[px;">]]
+
+    -- Process each cell
+      local t = {}
+      for i, v in ipairs(spline) do
+         t[#t + 1] = string.format("(%.2f, %.2f)", v[1], v[2])
+ 
+        -- HTML Color
+        local r = math.clamp(math.ceil(tonumber(string.format("%.2f", v[2])) * 255), 0, 255)
+        local g =0.0
+        local b =0.0
+        local rgb_str = string.format("#%02X%02X%02X", r, g, b)
+        html_str = html_str .. [[
+<td style="background-color:]] .. rgb_str .. [[;"><img width="]] .. tostring(tileSize) .. [[" height="]] .. tostring((v[2])*50) .. [[" src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iAAAABlBMVEUAAAAmRcn2EULJAAAAAnRSTlP/AOW3MEoAAAAJcEhZcwAACxMAAAsTAQCanBgAAAAOSURBVAiZY/j/n4EUBAD9Th/hNOA7twAAAABJRU5ErkJggg=='/><div style='margin:0 0;'>x</div></td>
+]]
+    end
+
+    -- HTML Footer
+     html_str = html_str .. "</tr>\n</table>"
+
+    InLabel:SetSource(Text(html_str), 0)
+
+  end
+end
+
+
+function Process(req)
+  local time = InTime:GetValue(req).Value
+  local offset = InOffset:GetValue(req).Value
+  local duration = InDuration:GetValue(req).Value
+  local startVal = InStartValue:GetValue(req).Value
+  local endVal = InEndValue:GetValue(req).Value
+
+
+
+  -- Check duration in milliseconds
+
+  local normTime = math.min(math.max((time - offset) / duration, 0), 1)
+  local idx = InEaseType:GetValue(req).Value + 1
+  local curve = easing_curves[idx] or { 0, 0, 1, 1 }
+
+  local eased = getEasedValue(normTime, curve)
+
+
+  local interp = startVal + (endVal - startVal) * eased
+  local interpRev = endVal - (endVal - startVal) * eased
+
+  OutForward:Set(req, interp)
+  OutReverse:Set(req, interpRev)
+
+end

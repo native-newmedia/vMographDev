@@ -1,0 +1,1073 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vJSONShapeRender_V2"
+DATATYPE = "Image"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType      = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls   = true,
+    REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name           = FUSE_NAME,
+    REGS_OpDescription  = "Create a polygon dot shapes from a JSON based Lua table of XY point pairs.",
+    REGS_OpIconString   = FUSE_NAME,
+    REGS_IconID         = "Icons.Tools.Icons.sRender",
+    REG_Version         = 101,
+})
+function Create()
+    -- [[ Creates the user interface. ]]
+    InSeparator_1 = self:AddInput("Separator_1", "Separator_1", {
+        INPID_InputControl = "SeparatorControl",
+        INP_External = false,
+        IC_Visible = false,
+    })
+    InUnConnectLines = self:AddInput("Use Edge Data", "unconnectlines", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InShowLines = self:AddInput("Show Lines", "showlines", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InShowDots = self:AddInput("Show Dots", "showdots", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 1,
+        ICD_Width = 1,
+    })
+    InShowCustom = self:AddInput("Show Custom", "showcustom_shapes", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InShowIndex = self:AddInput("Show Index", "showindex", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InShowImages = self:AddInput("Show Images", "showimage", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+
+    InLineWidth = self:AddInput("Line Width", "lineWidth", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed     = 0,
+        INP_MaxScale       = 0.1,
+        INP_Default        = 0.001,
+    })
+    InDotLineWidth = self:AddInput("Dot Line Width", "DotlineWidth", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed     = 0,
+        INP_MaxScale       = 0.1,
+        INP_Default        = 0.001,
+    })
+    InScaleImage = self:AddInput("Image Scale", "Image Scale", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed     = 0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 0.5,
+    })
+    self:BeginControlNest("Line Settings", "LineSettings", false, {})
+
+    InConnectGroups = self:AddInput("Connect Text Groups", "connectgroups", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InRenderOutline = self:AddInput("Render Outline Lines", "Outline_lines", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1,
+        ICD_Width = 1,
+    })
+    InSeparator_2 = self:AddInput("Separator_2", "Separator_2", {
+        INPID_InputControl = "SeparatorControl",
+        INP_External = false,
+        IC_Visible = true,
+    })
+    InLine_R = self:AddInput("Red", "Red_line", {
+        ICS_Name           = "Line Color",
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0,
+        INP_MaxScale       = 1.0,
+        CLRC_ShowWheel     = false,
+        IC_ControlGroup    = 1,
+        IC_ControlID       = 0,
+    })
+    InLine_G = self:AddInput("Green", "Green_line", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1,
+        IC_ControlGroup    = 1,
+        IC_ControlID       = 1,
+    })
+    InLine_B = self:AddInput("Blue", "Blue_line", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1,
+        IC_ControlGroup    = 1,
+        IC_ControlID       = 2,
+    })
+    InLine_A = self:AddInput("Alpha", "Alpha_line", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        IC_ControlGroup    = 1,
+        IC_ControlID       = 3,
+    })
+    self:EndControlNest()
+
+    self:BeginControlNest("Dot Settings", "DotSettings", false, {})
+
+
+    InOutlineDots = self:AddInput("Render Outline Dots", "outlinedots", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_DoNotifyChanged = true,
+        INP_Integer = true,
+        INP_Default = 0,
+        ICD_Width = 1,
+    })
+    InDotSides = self:AddInput("Dot Sides", "dotSides", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer        = true,
+        INP_MinScale       = 2,
+        INP_MinAllowed     = 2,
+        INP_MaxScale       = 10,
+        INP_Default        = 6,
+    })
+    InDotRadius = self:AddInput("Dot Radius", "dotRadius", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MaxScale       = 0.5,
+        INP_MinScale       = 0.0,
+        INP_MinAllowed     = 0.0,
+        INP_Default        = 0.01,
+    })
+    InDotsScale = self:AddInput("Dots Scale", "DotsScale", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinAllowed     = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+    })
+
+    InSeparator_3 = self:AddInput("Separator_3", "Separator_3", {
+        INPID_InputControl = "SeparatorControl",
+        INP_External = false,
+        IC_Visible = true,
+    })
+    InDot_R = self:AddInput("Red", "Red_dot", {
+        ICS_Name           = "Dot Color",
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1.0,
+        INP_MaxScale       = 1.0,
+        CLRC_ShowWheel     = false,
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 0,
+    })
+    InDot_G = self:AddInput("Green", "Green_dot", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.0,
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 1,
+    })
+    InDot_B = self:AddInput("Blue", "Blue_dot", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.5,
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 2,
+    })
+    InDot_A = self:AddInput("Alpha", "Alpha_dot", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 3,
+    })
+    self:EndControlNest()
+
+    self:BeginControlNest("Index Settings", "IndexSettings", false, {})
+    InTextSize = self:AddInput("Text Size", "TextSize", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale       = 0.01,
+        INP_MinAllowed     = 0,
+        INP_MaxScale       = 0.1,
+        INP_Default        = 0.025,
+    })
+    InTextStyle = self:AddInput("Text Style", "TextStyle", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default        = 1.0,
+        MBTNC_ShowName     = false,
+        {
+            MBTNC_AddButton    = "Regular",
+            MBTNCD_ButtonWidth = 0.3333,
+        },
+        {
+            MBTNC_AddButton    = "Bold",
+            MBTNCD_ButtonWidth = 0.3333,
+        },
+    })
+    InSeparator_4 = self:AddInput("Separator_4", "Separator_4", {
+        INPID_InputControl = "SeparatorControl",
+        INP_External = false,
+        IC_Visible = true,
+    })
+    InTxt_R = self:AddInput("Red", "Red_txt", {
+        ICS_Name           = "Txt Color",
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1.0,
+        INP_MaxScale       = 1.0,
+        CLRC_ShowWheel     = false,
+        IC_ControlGroup    = 3,
+        IC_ControlID       = 0,
+    })
+    InTxt_G = self:AddInput("Green", "Green_txt", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1,
+        IC_ControlGroup    = 3,
+        IC_ControlID       = 1,
+    })
+    InTxt_B = self:AddInput("Blue", "Blue_txt", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1,
+        IC_ControlGroup    = 3,
+        IC_ControlID       = 2,
+    })
+    InTxt_A = self:AddInput("Alpha", "Alpha_txt", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        IC_ControlGroup    = 3,
+        IC_ControlID       = 3,
+    })
+    self:EndControlNest()
+    self:BeginControlNest("Image Mask", "Image_Mask", true, { LBLC_PickButton = false })
+    InDoMask = self:AddInput("Enable Masking", "DoMask", {
+        LINKID_DataType     = "Number",
+        INPID_InputControl  = "CheckboxControl",
+        INP_Integer         = true,
+        INP_Default         = 0,
+        INP_DoNotifyChanged = true,
+        -- IC_Visible = false, PC_Visible = false
+    })
+    InShowMask = self:AddInput("Show Mask Overlay", "ShowMask", {
+        LINKID_DataType     = "Number",
+        INPID_InputControl  = "CheckboxControl",
+        INP_Integer         = true,
+        INP_Default         = 0,
+        INP_Passive         = true,
+        INP_DoNotifyChanged = true,
+        --  IC_Visible = false, PC_Visible = false
+    })
+    InMaskShapeSides = self:AddInput("Mask Shape Sides", "MMask_Shape", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 3,
+        INP_MaxScale = 50,
+        INP_Default = 6,
+        INP_Integer = true,
+        INP_DoNotifyChanged = true,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    -- hidden input used for ellipse preview control
+    InMaskCenter = self:AddInput("", "MaskCenter", {
+        LINKID_DataType = "Point",
+        INPID_InputControl = "OffsetControl",
+        IC_Visible = false,
+        INP_External = false,
+        INP_Passive = true,
+        INP_Disabled = true,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    InMaskRotation = self:AddInput("Mask Rotation", "Mask Rotation", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        -- INP_MinScale       = -360,
+        --INP_MaxScale       = 360,
+        INP_Default = 0.0,
+        INP_DoNotifyChanged = true,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    InMaskRadius = self:AddInput("Mask Radius", "MaskRadius", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INPID_PreviewControl = "EllipseControl",
+        INP_MinAllowed = 0.0001,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.2,
+        EC_GiveRadius = true,
+        ECID_Center = "MaskCenter",
+        IC_Visible = false,
+        PC_Visible = false
+    })
+
+    InMaskRoundness = self:AddInput("Mask Roundness", "MaskRoundness", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinAllowed = 0.0,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.055,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+
+    InMaskOffsetX = self:AddInput("Mask Offset X", "MaskOffsetX", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    InMaskOffsetY = self:AddInput("Mask Offset Y", "MaskOffsetY", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    InMaskSoftness = self:AddInput("Mask Softness", "MaskSoftness", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinAllowed = 0.0,
+        INP_MaxScale = 100,
+        INP_Default = 0.0,
+        ICD_Center = 10,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    InEdgeMode = self:AddInput("Image EdgeMode", "Image_EdgeMode", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed = 0,
+        INP_MaxScale = 2,
+        INP_Default = 0,
+        INP_Integer = true,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+
+    self:EndControlNest()
+
+    self:BeginControlNest("Style Settings", "stylesettings", false, {})
+    InFilter = self:AddInput("Filter", "Filter", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default        = 3.0,
+        {
+            MBTNC_AddButton    = "Box",
+            MBTNCD_ButtonWidth = 0.25,
+        },
+        {
+            MBTNC_AddButton    = "Bartlett",
+            MBTNCD_ButtonWidth = 0.25,
+        },
+        {
+            MBTNC_AddButton    = "Multi-box",
+            MBTNCD_ButtonWidth = 0.25,
+        },
+        {
+            MBTNC_AddButton    = "Gaussian",
+            MBTNCD_ButtonWidth = 0.25,
+        },
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    InSoftEdge = self:AddInput("Soft Edge", "SoftEdge", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed     = 0,
+        INP_MaxScale       = 50,
+        INP_Default        = 0,
+        IC_Visible         = false,
+        PC_Visible         = false
+    })
+    InLineType = self:AddInput("Line Type", "LineType", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default        = 0.0,
+        MBTNC_ShowName     = false,
+        {
+            MBTNC_AddButton    = "Solid",
+            MBTNCD_ButtonWidth = 0.33,
+        },
+        {
+            MBTNC_AddButton    = "Dash",
+            MBTNCD_ButtonWidth = 0.34,
+        },
+        {
+            MBTNC_AddButton    = "Dot",
+            MBTNCD_ButtonWidth = 0.33,
+        },
+        {
+            MBTNC_AddButton    = "Dash Dot",
+            MBTNCD_ButtonWidth = 0.5,
+        },
+        {
+            MBTNC_AddButton    = "Dash Dot Dot",
+            MBTNCD_ButtonWidth = 0.5,
+        },
+    })
+    InJoinType = self:AddInput("Join Type", "JoinType", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default        = 2.0,
+        MBTNC_ShowName     = false,
+        {
+            MBTNC_AddButton    = "Bevel",
+            MBTNCD_ButtonWidth = 0.3333,
+        },
+        {
+            MBTNC_AddButton    = "Round",
+            MBTNCD_ButtonWidth = 0.3333,
+        },
+    })
+
+    self:EndControlNest()
+
+
+
+
+    InImage = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+    InPoint = self:AddInput("JSON Point", "JSONPoint", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 2,
+    })
+    InEdge = self:AddInput("JSON Edge", "JSONEdge", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 3,
+    })
+    InShape = self:AddInput("JSON Custom Shape", "JSONCustomShape", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 4,
+    })
+    InGroups = self:AddInput("JSON Text Groups", "JSONTextGroups", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 5,
+    })
+    InTexture = self:AddInput("JSON Custom Image", "JSONCustomImage", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "ImageControl",
+        LINK_Main = 6,
+    })
+    InCustomColor = self:AddInput("Custom Color", "CustomColor", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 7,
+         INPID_InputControl = "ImageControl",
+        --INP_Priority = 1,
+    })
+    Output = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1
+    })
+end
+
+function NotifyChanged(inp, param, time)
+    --[[
+        Handles all input control events.
+        :param inp: Input that triggered a signal.
+        :type inp: Input
+        :param param: Parameter object holding the (new) value.
+        :type param: Parameter
+        :param time: Current frame number.
+        :type time: float
+    ]]
+    if param then
+        -- masking controls
+        if inp == InDoMask then
+            if (param.Value < 0.5) then
+                -- disable
+                InShowMask:SetAttrs({ IC_Visible = false })
+                InMaskShapeSides:SetAttrs({ IC_Visible = false })
+                InMaskRadius:SetAttrs({ IC_Visible = false })
+                InMaskRadius:SetAttrs({ PC_Visible = false })
+                InMaskSoftness:SetAttrs({ IC_Visible = false })
+                InMaskRotation:SetAttrs({ IC_Visible = false })
+                InMaskRoundness:SetAttrs({ IC_Visible = false })
+                InMaskOffsetX:SetAttrs({ IC_Visible = false })
+                InMaskOffsetY:SetAttrs({ IC_Visible = false })
+            else
+                -- enable
+                InShowMask:SetAttrs({ IC_Visible = true })
+                InMaskShapeSides:SetAttrs({ IC_Visible = true })
+                InMaskRadius:SetAttrs({ IC_Visible = true })
+                InMaskRadius:SetAttrs({ PC_Visible = (InShowMask:GetSource(time).Value >= 0.5) })
+                InMaskSoftness:SetAttrs({ IC_Visible = true })
+                InMaskRotation:SetAttrs({ IC_Visible = true })
+                InMaskRoundness:SetAttrs({ IC_Visible = true })
+                InMaskOffsetX:SetAttrs({ IC_Visible = true })
+                InMaskOffsetY:SetAttrs({ IC_Visible = true })
+            end
+        elseif inp == InShowMask then
+            InMaskRadius:SetAttrs({ PC_Visible = (param.Value >= 0.5 and InDoMask:GetSource(time).Value >= 0.5) })
+        elseif inp == InMaskShapeSides then --or inp == InAxis or inp == InOffset then
+            -- update mask overlay's position
+            -- local actualpos  = Point(position.X + offset * (axis.X - position.X), position.Y + offset * (axis.Y - position.Y))
+            local maskpos = Point(0.5, 0.5)
+            InMaskCenter:SetAttrs({ INP_Disabled = false })
+            InMaskCenter:SetSource(maskpos, time, 0)
+            InMaskCenter:SetAttrs({ INP_Disabled = true })
+        end
+    end
+    if inp == InShowDots then
+        if param.Value == 1.0 then
+            InDotRadius:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InDotSides:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InOutlineDots:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            -- InHideDots:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InDotsScale:SetAttrs({ IC_Visible = true, PC_Visible = true })
+        else
+            InOutlineDots:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InDotRadius:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InDotSides:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            -- InHideDots:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InDotsScale:SetAttrs({ IC_Visible = false, PC_Visible = false })
+        end
+    end
+end
+
+-- ============================================================================
+-- ---------- function createIndex Shapes -------------------------------------
+function createIndex_string(text, size, style)
+    local spacer = 13
+    local mat = Matrix4()
+    local font = "Open Sans"
+    local style = style
+    local font = TextStyleFont(font, style)
+    local tfm = TextStyleFontMetrics(font)
+
+    -- This is the distance between this line and the next one.
+    mat:Scale(1.0 / tfm.Scale, 1.0 / tfm.Scale, 1.0)
+    mat:Scale(size, size, 1)
+    mat:Scale(1.9, 1.9, 1)
+    -- set the initial baseline position of the text cursor
+    local sh, ch
+    local shape = Shape()
+    local shw = 0
+    local x_move = 0
+    for i = 1, #text do
+        ch = text:byte(i)
+        local cw = tfm:CharacterWidth(ch) * spacer * size
+        mat:Move(cw / 2, 0, 0)
+        x_move = x_move + cw + 0.0018
+        sh = tfm:GetCharacterShape(ch, false)
+        sh = sh:TransformOfShape(mat)
+        shape:AddShape(sh)
+        shw = shw + cw
+        -- Move to the next position for the next character
+        mat:Move(cw, 0, 0)
+    end
+
+    local text_height = (tfm.TextAscent + tfm.TextDescent + tfm.TextExternalLeading) * size
+    mat:Identity()
+    mat:Move(-x_move / 2, (text_height - size) / 2, 0)
+    shape = shape:TransformOfShape(mat)
+    return shape
+end
+
+-- ================================================================
+-- ---------- function createPoly Shapes --------------------------
+function createPoly(sides, r, angle)
+    -- shortcuts for faster access
+    local sin = math.sin
+    local cos = math.cos
+    local sh = Shape()
+    local sh_holder = Shape()
+    local x = cos(angle) * r
+    local y = sin(angle) * r
+    sh:MoveTo(x, y)
+
+    for i = 1, sides - 1 do
+        x = cos(i / sides * math.pi * 2 + angle) * r
+        y = sin(i / sides * math.pi * 2 + angle) * r
+        sh:LineTo(x, y)
+    end
+    sh:Close()
+    sh_holder:AddShape(sh)
+    return sh_holder
+end
+
+-- converts y-coordinates for use in matrix math, trigonometry and Shape object functions
+-- where, vertically, 1.0 isn't the image height but equals the image's width.
+function convertY(y, ref_img)
+    return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+function Process(req)
+    local img              = InImage:GetValue(req)
+    local out              = img:CopyOf()
+
+    local array_str_point  = InPoint:GetValue(req).Value
+    local array_str_edge   = InEdge:GetValue(req).Value
+    local array_str_shape  = InShape:GetValue(req):GetValue() or {}
+    local array_str_image  = InTexture:GetValue(req):GetValue() or {}
+    local array_str_groups = InGroups:GetValue(req):GetValue() or {}
+    local array_str_color  =  InCustomColor:GetValue(req):GetValue() or {}
+
+
+    local tbl = {}
+    if array_str_point and array_str_point ~= "" then
+        local inp_point_tbl = jsonutils.decode(array_str_point)
+        if inp_point_tbl ~= nil and type(inp_point_tbl) == "table" then
+            tbl = inp_point_tbl
+            if #tbl == 0 then
+                table.insert(tbl, { 0.5, convertY(0.5, img) })
+            end
+        else
+            table.insert(tbl, { 0.5, convertY(0.5, img) })
+        end
+    else
+        table.insert(tbl, { 0.5, convertY(0.5, img) })
+    end
+
+    local tbl_Edge = {}
+    if array_str_edge and array_str_edge ~= "" then
+        local inp_edge_tbl = jsonutils.decode(array_str_edge)
+        if inp_edge_tbl ~= nil and type(inp_edge_tbl) == "table" then
+            tbl_Edge = inp_edge_tbl
+        end
+    end
+
+    local tbl_Shape = {}
+    if array_str_shape and array_str_shape ~= "" then
+        local inp_shape_tbl = array_str_shape
+        if inp_shape_tbl ~= nil and type(inp_shape_tbl) == "table" then
+            tbl_Shape = inp_shape_tbl
+        end
+    end
+
+    local tbl_Groups = {}
+    if array_str_groups and array_str_groups ~= "" then
+        local inp_groups_tbl = array_str_groups
+        if inp_groups_tbl ~= nil and type(inp_groups_tbl) == "table" then
+            tbl_Groups = inp_groups_tbl
+        end
+    end
+
+
+    local tbl_Image = {}
+    if array_str_image and array_str_image ~= "" then
+        local inp_image_tbl = array_str_image
+        if inp_image_tbl ~= nil and type(inp_image_tbl) == "table" then
+            tbl_Image = inp_image_tbl
+        end
+    end
+
+
+    local tbl_Color = {}
+    if array_str_color and array_str_color ~= "" then
+        local inp_color_tbl = array_str_color
+        if inp_color_tbl ~= nil and type(inp_color_tbl) == "table" then
+            tbl_Color = inp_color_tbl
+        end
+    end
+
+   
+
+    local segmentDot   = Shape()
+    local segmentIndex = Shape()
+    local segmentLines = Shape()
+
+
+    local linetype             = math.floor(InLineType:GetValue(req).Value + 0.5) + 1
+    local jointype             = math.floor(InJoinType:GetValue(req).Value + 0.5) + 1
+    local line_width           = InLineWidth:GetValue(req).Value
+    local dot_width            = InDotLineWidth:GetValue(req).Value
+    local soft_edge            = InSoftEdge:GetValue(req).Value
+    local dot_sides            = InDotSides:GetValue(req).Value
+    local dot_radius           = InDotRadius:GetValue(req).Value
+    local filter               = math.floor(InFilter:GetValue(req).Value + 0.5) + 1
+    local line_r               = InLine_R:GetValue(req).Value
+    local line_g               = InLine_G:GetValue(req).Value
+    local line_b               = InLine_B:GetValue(req).Value
+    local line_a               = InLine_A:GetValue(req).Value
+    local dot_r                = InDot_R:GetValue(req).Value
+    local dot_g                = InDot_G:GetValue(req).Value
+    local dot_b                = InDot_B:GetValue(req).Value
+    local dot_a                = InDot_A:GetValue(req).Value
+    local txtSize              = InTextSize:GetValue(req).Value
+    local txtStyle             = math.floor(InTextStyle:GetValue(req).Value) + 1
+    local txt_r                = InTxt_R:GetValue(req).Value
+    local txt_g                = InTxt_G:GetValue(req).Value
+    local txt_b                = InTxt_B:GetValue(req).Value
+    local txt_a                = InTxt_A:GetValue(req).Value
+
+    local scaleDots            = InDotsScale:GetValue(req).Value
+    local render_outline_lines = InRenderOutline:GetValue(req).Value
+    local imageScale           = InScaleImage:GetValue(req).Value
+
+
+    local maskthickness = InMaskRoundness:GetValue(req).Value
+    local maskradius = InMaskRadius:GetValue(req).Value
+    local masksides = InMaskShapeSides:GetValue(req).Value
+    local maskblur = InMaskSoftness:GetValue(req).Value
+    local maskrotate = InMaskRotation:GetValue(req).Value * (math.pi * 200) / 360.0
+    local maskoffsetx = InMaskOffsetX:GetValue(req).Value
+    local maskoffsety = InMaskOffsetY:GetValue(req).Value
+    local imgEdgemode = InEdgeMode:GetValue(req).Value
+
+
+    local outline_line_type = {
+        "OLT_Solid",
+        "OLT_Dash",
+        "OLT_Dot",
+        "OLT_DashDot",
+        "OLT_DashDotDot",
+    }
+    local blurfilters       = {
+        "BT_Box",
+        "BT_Bartless",
+        "BT_MultiBox",
+        "BT_Gaussian",
+    }
+    local outline_join_type = {
+        "OJT_Bevel",
+        "OJT_Round",
+    }
+    local outline_cap_type  = {
+        "OCT_Butt",
+        "OCT_Square",
+        "OCT_Round",
+    }
+    local text_Style        = {
+        "Regular",
+        "Bold",
+    }
+
+    local mat               = Matrix4()
+    mat:Identity()
+
+    local ic = ImageChannel(out, 8)
+    local cs = ChannelStyle()
+    local fs = FillStyle()
+    ic:SetStyleFill(fs)
+    -- ================================================================
+    -- ----------  Add Lines ------------------------------------------
+    local shape = Shape()
+    local s_point = {}
+    local e_point = {}
+
+    -- ----------  Add Wireframe ------------------------------------------
+
+    for key, faces in ipairs(tbl_Edge) do
+        if type(faces) == "table" then
+            if #faces >= 2 then
+                for i = 2, #faces do
+                    table.insert(s_point, tbl[tonumber(faces[i - 1])])
+                    table.insert(e_point, tbl[tonumber(faces[i])])
+                end
+                table.insert(s_point, tbl[tonumber(faces[#faces])])
+                table.insert(e_point, tbl[tonumber(faces[1])])
+            end
+        end
+    end
+
+    -- ================================================================
+    -- ----------  Add UnConnect Lines --------------------------------
+
+    if InUnConnectLines:GetValue(req).Value > 0.5 then
+        shape:Clear()
+        for i = 1, #e_point do
+            local shape_line = Shape()
+            if e_point[i][2] == nil then
+            else
+                mat:Identity()
+                mat:Scale(0, 0, 1)
+                mat:Move(s_point[i][1], s_point[i][2], 0)
+                shape_line:MoveTo(s_point[i][1], s_point[i][2])
+                shape_line = shape_line:TransformOfShape(mat)
+                shape_line:LineTo(e_point[i][1], e_point[i][2])
+                shape:AddShape(shape_line)
+            end
+        end
+    else
+        for i = 1, #tbl do
+            if tbl[i][2] == nil then
+            else
+                mat:Identity()
+                mat:Move(tbl[i][1], tbl[i][2], 0)
+                shape:LineTo(tbl[i][1], tbl[i][2])
+            end
+        end
+    end
+
+    -- ================================================================
+    -- ----------  Connect Groups --------------------------------
+
+    if InConnectGroups:GetValue(req).Value > 0.5 then
+        shape:Clear()
+        mat:Identity()
+        local index = 1 -- starting index in tbl
+        local GroupShapes = Shape()
+
+        for i, groupSize in ipairs(tbl_Groups) do
+            -- Store the first entry of the group
+            local firstEntry = tbl[index]
+            local shx = Shape()
+
+            shx:MoveTo(firstEntry[1], firstEntry[2])
+
+            for j = 1, groupSize do
+                local entry = tbl[index]
+                if entry then
+                    shx:LineTo(entry[1], entry[2])
+                    index = index + 1
+                else
+                    break
+                end
+                GroupShapes:AddShape(shx)
+                shx:Clear()
+            end
+        end
+        shape:AddShape(GroupShapes)
+    end
+
+    -- ================================================================
+
+    segmentLines:AddShape(shape)
+    --Render Outline lines
+    if render_outline_lines > 0.5 then
+        segmentLines = segmentLines:OutlineOfShape(line_width, "OLT_Solid", "OJT_Round", 8, "SWM_Normal",
+            (req:IsQuick() and 8 or 16))
+    end
+
+    -- ================================================================
+    -- ----------  Add Dots -------------------------------------------
+    -- Process each point in the table to create shapes
+    local DotHolder={}
+
+    for i, point in ipairs(tbl) do
+        -- Skip if y coordinate is nil
+        if point[2] == nil then
+            goto continue
+        end
+
+        -- Create transformation matrix for this point
+        mat:Identity()
+
+        mat:Scale(scaleDots, scaleDots, 1)
+        mat:Move(0, 0, 0)
+        --mat:Move(point[1], point[2], 0)
+        mat:Move(point[1], point[2], 0)
+
+        -- Create Dot and Index shapes
+        local shapeDot = createPoly(dot_sides, dot_radius, 0)
+        shapeDot = shapeDot:TransformOfShape(mat)
+      --  segmentDot:AddShape(shapeDot)
+        
+
+
+
+
+
+         --Render Outline Dots
+    if InOutlineDots:GetValue(req).Value > 0.5 then
+        shapeDot = shapeDot:OutlineOfShape(dot_width, outline_line_type[linetype], outline_join_type[jointype],
+            "OCT_Square", (req:IsQuick() and 8 or 16))
+    end
+        DotHolder[i]=shapeDot
+        -- Create and add index shape if enabled
+        if InShowIndex:GetValue(req).Value > 0.5 then
+            local shapeIndex = createIndex_string(tostring(i), txtSize, text_Style[txtStyle])
+            segmentIndex:AddShape(shapeIndex:TransformOfShape(mat))
+        end
+
+        ::continue::
+    end
+
+    -- ================================================================
+   
+    -- ================================================================
+
+    -- Render Elements
+    mat:Identity()
+    --Add Lines to Image
+    if InShowLines:GetValue(req).Value > 0.5 then
+        cs.Color = Pixel({
+            R = line_r,
+            G = line_g,
+            B = line_b,
+            A = line_a
+        })
+        ic:ShapeFill(segmentLines)
+        ic:PutToImage("CM_Merge", cs)
+    end
+    --Add DOT to Image
+    if InShowDots:GetValue(req).Value > 0.5 then
+    for i = 1, #tbl_Color do
+     local _dot_1 = Shape()
+            _dot_1 = DotHolder[i]
+            if _dot_1 == nil then
+            else
+      
+        cs.Color = Pixel({
+            R = tbl_Color[i].R,
+            G = tbl_Color[i].G,
+            B = tbl_Color[i].B,
+            A = tbl_Color[i].A,
+        })
+        ic:ShapeFill(_dot_1)
+        ic:PutToImage("CM_Merge", cs)
+    end
+    end
+    end
+    --Add Text Index to Image
+    if InShowIndex:GetValue(req).Value > 0.5 then
+        cs.Color = Pixel({
+            R = txt_r,
+            G = txt_g,
+            B = txt_b,
+            A = txt_a
+        })
+        ic:ShapeFill(segmentIndex)
+        ic:PutToImage("CM_Merge", cs)
+    end
+    --Add Custom Shape to Image
+    if InShowCustom:GetValue(req).Value > 0.5 then
+        for i = 1, #tbl_Shape do
+            local _shape_1 = Shape()
+            _shape_1 = tbl_Shape[i][1]
+            if _shape_1 == nil then
+            else
+                cs.Color = Pixel {
+                    R = tbl_Shape[i][2].R,
+                    G = tbl_Shape[i][2].G,
+                    B = tbl_Shape[i][2].B,
+                    A = 1
+                }
+
+                ic:ShapeFill(_shape_1)
+                ic:PutToImage("CM_Merge", cs)
+            end
+        end
+    end
+
+
+    if InShowImages:GetValue(req).Value > 0.5 then
+        -- Add Custom Images to Image
+        for i = 1, #tbl_Image do
+            local temp = out:CopyOf()
+            temp:Clear()
+
+            local image_1 = tbl_Image[i] and tbl_Image[i][1] and tbl_Image[i][1][1] or nil
+            local dot = tbl[i]
+            -- dump(dot)
+
+            if self.Status == "OK" and image_1 then
+                local mat = Matrix4()
+                mat:Identity()
+
+                local newimage = Image({ IMG_Like = image_1 })
+                local maskImg = newimage:CopyOf()
+                maskImg:Fill(Pixel({ R = 0, G = 0, B = 0, A = 0 }))
+
+                local sh = Shape()
+                sh = createPoly(masksides, maskradius, maskrotate)
+
+                mat:Identity()
+                mat:Move(0.5 + maskoffsetx, 0.5 + maskoffsety, 0)
+
+                ic = ImageChannel(maskImg, 8)
+                sh = sh:TransformOfShape(mat)
+
+
+
+                cs.Color = Pixel({ R = 1, G = 1, B = 1, A = 1 })
+                cs.SoftnessX = maskblur
+                cs.SoftnessY = maskblur
+                ic:ShapeFill(sh)
+                ic:PutToImage("CM_Merge", cs)
+
+
+                if maskthickness > 0 then
+                    sh = sh:OutlineOfShape(maskthickness)
+                    ic:ShapeFill(sh)
+                    ic:PutToImage("CM_Merge", cs)
+                end
+
+                image_1 = image_1:ChannelOpOf("Multiply", maskImg, { R = "Fg.R", G = "Fg.G", B = "Fg.B", A = "Fg.A" })
+                maskImg = nil
+
+
+                if image_1 and dot and dot[1] and dot[2] then
+                    -- print(dot[2], tbl[1][2])
+                    out:Merge(image_1, {
+                        MO_XSize = imageScale,
+                        MO_YSize = imageScale,
+                        MO_XOffset = dot[1],
+                        MO_YOffset = dot[2], -- + 0.22 ,
+                        MO_Angle = 0,
+                    })
+                end
+            end
+            -- Update the rendering progress bar on the node
+            local progress = i / #tbl_Image
+            self:SetProgress(progress)
+
+            collectgarbage()
+        end
+    end
+    -- ================================================================
+    Output:Set(req, out)
+end

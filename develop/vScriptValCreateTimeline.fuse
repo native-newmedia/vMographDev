@@ -1,0 +1,924 @@
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vScriptValCreateTimeline"
+DATATYPE = "ScriptVal"
+MAX_INPUTS = 64
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType      = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls   = true,
+    REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name           = FUSE_NAME,
+    REGS_OpDescription  = "Stylized timeline with major and minor tick marks",
+    REGS_OpIconString   = FUSE_NAME,
+    REGS_IconID         = "Icons.Tools.Icons.RunCommand",
+    REG_TimeVariant     = true, -- required to disable caching of the current time parameter
+    REG_Unpredictable   = true,
+})
+
+function Create()
+    -- [[ Creates the user interface. ]]
+    ----------------------------------------------------------------------------------MAIN-NUMBERS
+
+    InR_mainNumbers = self:AddInput("Main Lines Count", "mainNumbers", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed     = 1.0,
+        INP_MaxScale       = 20.0,
+        INP_Default        = 1.0,
+        INP_Integer        = true,
+    })
+
+    InR_mainSize = self:AddInput("Main Lines Size", "M_timelineSize", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.1,
+        INP_MaxScale = 1.0,
+        INP_Default = 0.01,
+    })
+    ----------------------------------------------------------------------------------SMALL-NUMBERS
+
+    InR_smallNumbers = self:AddInput("Small Lines Count", "smallNumbers", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed     = 2.0,
+        INP_MaxScale       = 20.0,
+        INP_Default        = 5.0,
+        INP_Integer        = true,
+    })
+
+
+
+    InR_smallSize = self:AddInput("Small Lines Size", "S_timelineSize", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.1,
+        INP_MaxScale = 1.0,
+        INP_Default = 0.01,
+    })
+
+    InR_Spacing = self:AddInput("Timeline Number Spacing", "spacing_numbers", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 10.0,
+        INP_Default = 0.0,
+    })
+
+
+    ----------------------------------------------------------------------------------
+    ----------------------------------------------------------------------------------Timeline NODES
+
+    self:BeginControlNest("Timeline Nodes", "Timeline_nodes", false, {})
+
+    InR_Show_Nodes = self:AddInput("Show Timeline nodes", "show_Timeline_nodes", {
+        LINKID_DataType     = "Number",
+        INPID_InputControl  = "CheckboxControl",
+        LINKS_Name          = "Show Timeline Nodes",
+        INP_DoNotifyChanged = true,
+        INP_Default         = 0.0,
+    })
+
+
+    InR_Nodes_Sides = self:AddInput("Timeline Nodes Sides", "timelineSides", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed     = 2.0,
+        INP_MaxScale       = 80.0,
+        INP_Default        = 5.0,
+        INP_Integer        = true,
+    })
+
+
+    InR_Nodes_Size = self:AddInput("Timeline Nodes Size", "timelineSize", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.1,
+        INP_MaxScale = 1.0,
+        INP_Default = 0.01,
+    })
+
+
+    InR_Nodes_Offset = self:AddInput("Timeline Nodes Offset", "timelineOffset", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MaxScale       = 2.0,
+        INP_Default        = 1.0,
+    })
+
+
+    InR_Nodes_Rot = self:AddInput("Timeline Nodes Rotation", "Timeline_Rotation", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MaxScale       = 360.0,
+        INP_Default        = 0.0,
+    })
+
+
+
+
+    self:EndControlNest()
+
+
+    ----------------------------------------------------------------------------------Timeline-FONT
+    self:BeginControlNest("Timeline Text", "Timeline_text", false, {})
+
+    InR_ShowTimelineFont = self:AddInput("Show Timeline font", "show_Timeline_font", {
+        LINKID_DataType     = "Number",
+        INPID_InputControl  = "CheckboxControl",
+        LINKS_Name          = "Show Number Text",
+        INP_DoNotifyChanged = true,
+        INP_Default         = 0.0,
+    })
+
+    InR_SHOW_Timeline_START_NUMBER = self:AddInput("Number StatAt", "Number_StatAt", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        LINKS_Name = "Number Start At:",
+        INP_MinAllowed = 0,
+        INP_MaxScale = 1000,
+        INP_Default = 0,
+        INP_Integer = true,
+
+    })
+
+    InR_Number_Step = self:AddInput("Number Step", "InR_Number_Step", {
+        LINKID_DataType = "Number",
+        DEFAULT = 10,
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 1,
+        INP_MaxScale = 100,
+        ICS_ControlPage = "Controls",
+    })
+
+    InR_Number_decimals = self:AddInput("Show decimals", "show_decimals", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 0.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true
+    })
+
+    ----------------------------------------------------------------------------------FONT STYLE
+    Inline1Separator = self:AddInput("line1Separator", "line1Separator", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InFont = self:AddInput("Font", "Font", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 2,
+        IC_ControlID = 0,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+
+    InFontStyle = self:AddInput("Text Style", "Text_Style", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 2,
+        IC_ControlID = 1,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+
+    InR_FontSize = self:AddInput("Text Size", "Text_Size", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinAllowed = 0.01,
+        INP_MaxScale = 1.0,
+        INP_Default = 0.03,
+    })
+
+    InR_Offset_Timeline_FONT = self:AddInput("Text Y Offset", "Text_Y_Offset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 2.0,
+        INP_Default = 1.0,
+    })
+
+
+
+
+    InFontSize = self:AddInput("Text Size", "TextSize", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale       = 0.01,
+        INP_MinAllowed     = 0,
+        INP_MaxScale       = 0.1,
+        INP_Default        = 0.025,
+        IC_Visible         = false,
+        PC_Visible         = false,
+    })
+
+
+
+    InFontRotate = self:AddInput("Text Rotate", "Text_Rotate", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MaxScale = 360.0,
+        INP_Default = 0.0,
+    })
+    --Text Color
+    ---------------------------------------------------------
+    InR_4        = self:AddInput("Red", "Red_4", {
+        ICS_Name           = "Text Color",
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1.0,
+        INP_MaxScale       = 1.0,
+        CLRC_ShowWheel     = false,
+        IC_ControlGroup    = 40,
+        IC_ControlID       = 0,
+    })
+    InG_4        = self:AddInput("Green", "Green_4", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.9,
+        IC_ControlGroup    = 40,
+        IC_ControlID       = 1,
+    })
+    InB_4        = self:AddInput("Blue", "Blue_4", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.6,
+        IC_ControlGroup    = 40,
+        IC_ControlID       = 2,
+    })
+
+    self:EndControlNest()
+
+    ----------------------------------------------------------------------------------LINE_STYLE
+    self:BeginControlNest("Timeline Style", "Timeline_style", false, {})
+
+    InR_Thickness = self:AddInput("Thickness", "Timeline_Thickness", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinAllowed = 0.0001,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.001,
+    })
+
+
+    InR_LineType = self:AddInput("Type", "Timeline_Type", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default        = 0.0,
+        MBTNC_ShowName     = false,
+        { MBTNC_AddButton = "Solid",        MBTNCD_ButtonWidth = 0.33, },
+        { MBTNC_AddButton = "Dash",         MBTNCD_ButtonWidth = 0.34, },
+        { MBTNC_AddButton = "Dot",          MBTNCD_ButtonWidth = 0.33, },
+        { MBTNC_AddButton = "Dash Dot",     MBTNCD_ButtonWidth = 0.5, },
+        { MBTNC_AddButton = "Dash Dot Dot", MBTNCD_ButtonWidth = 0.5, },
+    })
+    --Main Lines
+    ---------------------------------------------------------
+    InR_1        = self:AddInput("Red", "Red_1", {
+        ICS_Name           = "Main Lines Color",
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1.0,
+        INP_MaxScale       = 1.0,
+        CLRC_ShowWheel     = false,
+        IC_ControlGroup    = 10,
+        IC_ControlID       = 0,
+    })
+    InG_1        = self:AddInput("Green", "Green_1", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.9,
+        IC_ControlGroup    = 10,
+        IC_ControlID       = 1,
+    })
+    InB_1        = self:AddInput("Blue", "Blue_1", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.6,
+        IC_ControlGroup    = 10,
+        IC_ControlID       = 2,
+    })
+
+    --Sub Lines
+    ---------------------------------------------------------
+    InR_2        = self:AddInput("Red", "Red_2", {
+        ICS_Name           = "Small Lines Color",
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1.0,
+        INP_MaxScale       = 1.0,
+        CLRC_ShowWheel     = false,
+        IC_ControlGroup    = 20,
+        IC_ControlID       = 0,
+    })
+    InG_2        = self:AddInput("Green", "Green_2", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.9,
+        IC_ControlGroup    = 20,
+        IC_ControlID       = 1,
+    })
+    InB_2        = self:AddInput("Blue", "Blue_2", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.6,
+        IC_ControlGroup    = 20,
+        IC_ControlID       = 2,
+    })
+
+    --Node Lines
+    ---------------------------------------------------------
+    InR_3        = self:AddInput("Red", "Red_3", {
+        ICS_Name           = "Nodes Color",
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1.0,
+        INP_MaxScale       = 1.0,
+        CLRC_ShowWheel     = false,
+        IC_ControlGroup    = 30,
+        IC_ControlID       = 0,
+    })
+    InG_3        = self:AddInput("Green", "Green_3", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.9,
+        IC_ControlGroup    = 30,
+        IC_ControlID       = 1,
+    })
+    InB_3        = self:AddInput("Blue", "Blue_3", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.6,
+        IC_ControlGroup    = 30,
+        IC_ControlID       = 2,
+    })
+
+    self:EndControlNest()
+
+    ----------------------------------------------------------------------------------FONT Animation
+    self:BeginControlNest("Timeline Animation", "Timeline_animation", false, {})
+    InR_Animation                 = self:AddInput("Animation", "Timeline_Animation", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        MBTNC_ShowName = false,
+        { MBTNC_AddButton = "None",   MBTNCD_ButtonWidth = 0.33, },
+        { MBTNC_AddButton = "Auto",   MBTNCD_ButtonWidth = 0.33, },
+        { MBTNC_AddButton = "Manual", MBTNCD_ButtonWidth = 0.33, },
+        INP_DoNotifyChanged = true,
+    })
+    InR_Animation_Speed           = self:AddInput("Animation Speed", "Timeline_Animation_Speed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinAllowed = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 0.5,
+    })
+    InR_Animation_Offset          = self:AddInput("Animation Offset", "Timeline_Animation_Offset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0,
+        INP_MaxScale = 10,
+        INP_Default = 0,
+        INP_Integer = true,
+        INP_MinAllowed = 0,
+        INP_MaxAllowed = 1e+38,
+        INP_DoNotifyChanged = true,
+    })
+    InR_Animation_Loop            = self:AddInput("Loop Animation", "loopAnimation", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true
+    })
+
+    InR_PointerShape              = self:AddInput("Pointer Shape", "PointerShape", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        MBTNC_ShowName = false,
+        { MBTNC_AddButton = "None",   MBTNCD_ButtonWidth = 0.33, },
+        { MBTNC_AddButton = "Arrow",  MBTNCD_ButtonWidth = 0.33, },
+        { MBTNC_AddButton = "Custom", MBTNCD_ButtonWidth = 0.33, },
+        INP_DoNotifyChanged = true,
+    })
+
+    InR_Animation_Arrrow_Y        = self:AddInput("Arrow Y Pos", "Timeline_Arrow_YPos", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MaxScale = 1.0,
+        INP_Default = 0.0,
+        INP_MaxAllowed = 1e+38,
+        INP_DoNotifyChanged = true,
+    })
+    InR_Animation_Arrrow_Rotation = self:AddInput("Arrow Rotation", "Timeline_Arrow_Rotation", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinAllowed = 0.0,
+        INP_MaxScale = 360.0,
+        INP_Default = 0.0,
+        INP_DoNotifyChanged = true,
+    })
+
+    InR_Animation_Arrrow_Scale    = self:AddInput("Arrow Scale", "Timeline_Arrow_Scale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinAllowed = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+        INP_DoNotifyChanged = true,
+    })
+    --Arrow / Custom Color
+    ---------------------------------------------------------
+    InR_5                         = self:AddInput("Red", "Red_5", {
+        ICS_Name           = "Color",
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1.0,
+        INP_MaxScale       = 1.0,
+        CLRC_ShowWheel     = false,
+        IC_ControlGroup    = 50,
+        IC_ControlID       = 0,
+    })
+    InG_5                         = self:AddInput("Green", "Green_5", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.9,
+        IC_ControlGroup    = 50,
+        IC_ControlID       = 1,
+    })
+    InB_5                         = self:AddInput("Blue", "Blue_5", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.6,
+        IC_ControlGroup    = 50,
+        IC_ControlID       = 2,
+    })
+    Inline15Separator             = self:AddInput("line15Separator", "line15Separator", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+    self:EndControlNest()
+    ------------------------------------------------------------------------------------------FINAL TRANSFORMATION
+
+
+    InR_Rotation = self:AddInput("Timeline_Rotation", "Timeline_rotation", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        --INP_MinAllowed =    0.0,
+        INP_MaxScale = 360,
+        INP_Default = 0,
+        LINKS_Name = "Rotation",
+    })
+
+    InR_R_scale = self:AddInput("Timeline Scale", "R_shape_scale", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale       = 0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        INP_MinAllowed     = 0.0,
+        LINKS_Name         = "Scale",
+
+    })
+
+
+    InR_R_posX = self:AddInput("Timeline PosX", "R_shape_posX", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale       = -0.50,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 0.0,
+        LINKS_Name         = "Pos X",
+
+    })
+
+    InR_R_posY = self:AddInput("Timeline PosY", "R_shape_posY", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale       = -0.50,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 0.0,
+        LINKS_Name         = "Pos Y",
+
+    })
+    ----------------------------------------------------------------------------------TRANSFORMATION
+
+    InShowInput = self:AddInput("Show Input", "ShowInput", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 0.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true
+    })
+
+    InScriptVal = self:AddInput("ScriptVal", "ScriptVal", {
+        LINKID_DataType = DATATYPE,
+        LINK_Main = 1,
+        INP_Required = false,
+    })
+
+    OutScriptValTimeShape = self:AddOutput("Output Shape", "OutputShape", {
+        LINKID_DataType = DATATYPE,
+        LINK_Main = 1
+    })
+    OutScriptValData = self:AddOutput("Output_Data", "Outputdata", {
+        LINKID_DataType = DATATYPE,
+       -- LINK_Main = 2
+    })
+end
+
+function NotifyChanged(inp, param, time)
+    if inp == InR_Animation then
+        if param.Value == 1.0 then
+            InR_Animation_Speed:SetAttrs({ IC_Visible = true, PC_Visible = true })
+            InR_Animation_Offset:SetAttrs({ IC_Visible = false, PC_Visible = false })
+        else
+            InR_Animation_Speed:SetAttrs({ IC_Visible = false, PC_Visible = false })
+            InR_Animation_Offset:SetAttrs({ IC_Visible = true, PC_Visible = true })
+        end
+    end
+
+
+    -------------------------FONT STYLE
+
+    if inp == InFont then
+        local f = param.Value
+
+        if f == nil or string.len(f) == 0 then
+            InFont:SetSource(Text("Arial"), time)
+        end
+    elseif inp == InFontStyle then
+        local f = param.Value
+
+        if f == nil or string.len(f) == 0 then
+            InFontStyle:SetSource(Text("Regular"), time)
+        end
+    end
+end
+
+-- function createPoly Shapes-------------------------------
+
+function createPoly(sides, r, angle, dup)
+    local mat = Matrix4()
+    mat:Identity()
+    mat:Move(0, 0, 0)
+
+    local sin = math.sin
+    local cos = math.cos
+
+    local sh = Shape()
+    local x = cos(angle) * r
+    local y = sin(angle) * r
+
+    sh:MoveTo(x, y)
+    for i = 1, sides - 1 do
+        x = cos(i / sides * math.pi * 2 + angle) * r
+        y = sin(i / sides * math.pi * 2 + angle) * r
+        sh:LineTo(x, y)
+    end
+    sh:Close()
+
+    return sh
+end
+
+----function Create font--------------------------------------------
+
+function drawstring(img, font, style, size, justify, quality, text, fontRot)
+    local font = TextStyleFont(font, style)
+    local tfm = TextStyleFontMetrics(font)
+
+    local line_height = (tfm.TextAscent + tfm.TextDescent + tfm.TextExternalLeading) * 10 * size
+
+    local mat = Matrix4()
+    mat:Scale(1.0 / tfm.Scale, 1.0 / tfm.Scale, 1.0)
+    mat:Scale(size, size, 1)
+
+
+    local ch, prevch
+
+    local shape = Shape()
+    local sh = Shape()
+
+    local x_move = 0
+
+    mat:Move(0, 0, 0)
+
+    for line in string.gmatch(text, "%C+") do
+        local line_width = 0
+        for i = 1, #line do
+            ch = line:sub(i, i):byte()
+
+            line_width = line_width + tfm:CharacterWidth(ch) * 10 * size
+        end
+
+        if justify == 0 then
+
+        elseif justify == 1 then
+            mat:Move(-line_width / 2, 0, 0)
+        elseif justify == 2 then
+            mat:Move(-line_width, 0, 0)
+        end
+
+
+        for i = 1, #line do
+            prevch = ch
+
+            ch = line:sub(i, i):byte()
+
+            local cw = tfm:CharacterWidth(ch) * 10 * size
+
+            if prevch then
+                x_offset = tfm:CharacterKerning(prevch, ch) * 10 * size
+
+                x_move = x_move + x_offset
+                mat:Move(x_offset, 0, 0)
+            end
+
+            mat:Move(cw / 2, (-size / 2) / 2, 0)
+            x_move = x_move + cw
+
+            sh = tfm:GetCharacterShape(ch, false)
+            sh = sh:TransformOfShape(mat)
+
+            shape:AddShape(sh)
+
+            mat:Move(cw / 2, (size / 2) / 2, 0)
+        end
+    end
+
+
+
+    local mat2 = Matrix4()
+    mat2:RotZ(fontRot)
+    shape = shape:TransformOfShape(mat2)
+
+    return shape
+end
+
+function Process(req)
+    local shape_holder    = Shape()
+    local sh              = Shape()
+    local tbl_Shape       = InScriptVal:GetValue(req):GetValue() or {}
+    local outputShape     = Shape()
+
+    -- Parameters
+    local timelineSpacing = InR_Spacing:GetValue(req).Value
+    local mainNumbers     = InR_mainNumbers:GetValue(req).Value
+    local mainSize        = InR_mainSize:GetValue(req).Value
+    local smallNumbers    = InR_smallNumbers:GetValue(req).Value
+    local smallSize       = InR_smallSize:GetValue(req).Value
+
+    local timelineRotate  = InR_Nodes_Rot:GetValue(req).Value * (math.pi * 2) / 360.0
+    local timelineOffset  = InR_Nodes_Offset:GetValue(req).Value
+    local timelineSize    = InR_Nodes_Size:GetValue(req).Value / 2.0
+    local timelineSides   = InR_Nodes_Sides:GetValue(req).Value
+
+    local font            = InFont:GetValue(req).Value
+    local style           = InFontStyle:GetValue(req).Value
+    local fontRot         = InFontRotate:GetValue(req).Value
+    local n_decimals      = InR_Number_decimals:GetValue(req).Value
+
+    local quality         = 32
+    local justify         = 1
+
+    if not next(FontManager:GetFontList()) then
+        FontManager:ScanDir()
+    end
+
+    if req:IsQuick() then
+        quality = 1
+    end
+
+    local num_startat      = InR_SHOW_Timeline_START_NUMBER:GetValue(req).Value
+    local number_step      = InR_Number_Step and InR_Number_Step:GetValue(req).Value or 10
+
+    local outlinetypes     = { "OLT_Solid", "OLT_Dash", "OLT_Dot", "OLT_DashDot", "OLT_DashDotDot" }
+
+    local r_linetype       = math.floor(InR_LineType:GetValue(req).Value + 0.5) + 1
+    local r_thickness      = InR_Thickness:GetValue(req).Value
+    local r_X              = InR_R_posX:GetValue(req).Value
+    local r_Y              = InR_R_posY:GetValue(req).Value
+    local r_S              = InR_R_scale:GetValue(req).Value
+
+    -- Add Color Settings here for the next version
+
+    local globalScale      = 1
+
+    local start_lines      = Shape()
+    local end_lines        = Shape()
+    local main_lines       = Shape()
+    local small_lines      = Shape()
+
+    local positionTbl      = {}
+    local arrowPositionTbl = {}
+
+    local smallLineMode    = "per_section"
+
+    start_lines:MoveTo(((timelineSpacing / 10) * (0)) * globalScale, 0 * globalScale)
+    start_lines:LineTo(((timelineSpacing / 10) * (0)) * globalScale, mainSize * globalScale)
+    table.insert(positionTbl, { ((timelineSpacing / 10) * (0)) * globalScale, mainSize * globalScale })
+    table.insert(arrowPositionTbl, { ((timelineSpacing / 10) * (0)) * globalScale, 0 * globalScale })
+
+    for z = 0, mainNumbers do
+        if z >= mainNumbers then break end
+
+        local main_x = (timelineSpacing / 10) * z
+        local next_main_x = (timelineSpacing / 10) * (z + 1)
+
+        if z > 0 then
+            main_lines:MoveTo(main_x * globalScale, 0 * globalScale)
+            main_lines:LineTo(main_x * globalScale, mainSize * globalScale)
+            table.insert(positionTbl, { main_x * globalScale, mainSize * globalScale })
+            table.insert(arrowPositionTbl, { main_x * globalScale, 0 * globalScale })
+        end
+
+        if smallLineMode == "per_section" then
+            local section_length = next_main_x - main_x
+            local segment_spacing = section_length / smallNumbers
+
+            for v = 1, smallNumbers - 1 do
+                local small_x = main_x + segment_spacing * v
+                small_lines:MoveTo(small_x * globalScale, 0 * globalScale)
+                small_lines:LineTo(small_x * globalScale, smallSize * globalScale)
+                table.insert(arrowPositionTbl, { small_x * globalScale, 0 * globalScale })
+            end
+        end
+    end
+
+    if smallLineMode == "global" then
+        local total_length = (timelineSpacing / 10) * (mainNumbers)
+        local global_spacing = total_length / (mainNumbers * smallNumbers)
+
+        for i = 1, mainNumbers * smallNumbers do
+            local small_x = global_spacing * i
+            small_lines:MoveTo(small_x * globalScale, 0 * globalScale)
+            small_lines:LineTo(small_x * globalScale, smallSize * globalScale)
+            table.insert(arrowPositionTbl, { small_x * globalScale, 0 * globalScale })
+        end
+    end
+
+    end_lines:MoveTo(((timelineSpacing / 10) * (mainNumbers)) * globalScale, 0 * globalScale)
+    end_lines:LineTo(((timelineSpacing / 10) * (mainNumbers)) * globalScale, mainSize * globalScale)
+    table.insert(positionTbl, { ((timelineSpacing / 10) * (mainNumbers)) * globalScale, mainSize * globalScale })
+    table.insert(arrowPositionTbl, { ((timelineSpacing / 10) * (mainNumbers)) * globalScale, 0 * globalScale })
+
+    local Lines_Holder = Shape()
+    Lines_Holder:AddShape(start_lines)
+    Lines_Holder:AddShape(end_lines)
+    Lines_Holder:AddShape(small_lines)
+    Lines_Holder:AddShape(main_lines)
+
+    local Timeline_nodes = {}
+    local Timeline_nodes_holder = Shape()
+
+    if InR_Show_Nodes:GetValue(req).Value > 0.5 then
+        for i = 1, #positionTbl do
+            local matR_3 = Matrix4()
+            Timeline_nodes[i] = createPoly(timelineSides, timelineSize, timelineRotate, 1)
+            matR_3:Move(positionTbl[i][1], positionTbl[i][2] * timelineOffset, 0)
+            Timeline_nodes[i] = Timeline_nodes[i]:TransformOfShape(matR_3)
+            Timeline_nodes_holder:AddShape(Timeline_nodes[i])
+        end
+        Lines_Holder:AddShape(Timeline_nodes_holder)
+    end
+
+    Lines_Holder = Lines_Holder:OutlineOfShape(r_thickness, outlinetypes[r_linetype], "OJT_Round",
+        (req:IsQuick() and 8 or 16))
+
+    local Timeline_font = {}
+    local Timeline_font_holder = Shape()
+
+    local offset_R_font = InR_Offset_Timeline_FONT:GetValue(req).Value
+    local r_font_size = InR_FontSize:GetValue(req).Value
+
+    if InR_ShowTimelineFont:GetValue(req).Value > 0.5 then
+        for i = 1, #positionTbl do
+            local matR_4 = Matrix4()
+            local label_value = num_startat + (i - 1) * number_step
+            if n_decimals > 0 then
+                label_value = math.floor(label_value)
+            end
+
+            Timeline_font[i] = drawstring(out, font, style, r_font_size, 1, quality, tostring(label_value), fontRot)
+            matR_4:Move(positionTbl[i][1], offset_R_font * positionTbl[i][2], 0)
+
+            Timeline_font[i] = Timeline_font[i]:TransformOfShape(matR_4)
+            Timeline_font_holder:AddShape(Timeline_font[i])
+        end
+        Lines_Holder:AddShape(Timeline_font_holder)
+    end
+
+    -- Smooth and Aligned Arrow Animation
+    local animatedArrow = Shape()
+
+    local frame = InR_Animation_Offset:GetValue(req).Value -- req:GetTime()
+    local speed = InR_Animation_Speed:GetValue(req).Value  --0.5
+    local anim_pos = 0
+    if InR_Animation:GetValue(req).Value == 1 then
+        anim_pos = frame + req:GetTime() * speed
+    elseif InR_Animation:GetValue(req).Value == 2 then
+        anim_pos = frame
+    end
+
+
+    local total_positions = #arrowPositionTbl
+
+    -- STOP ANIMATION WHEN REACHING THE END
+
+    if InR_Animation_Loop:GetValue(req).Value == 1 then
+        anim_pos = anim_pos % total_positions
+        if anim_pos < 0 then
+            anim_pos = anim_pos + total_positions
+        end
+        if anim_pos == 0 then
+            anim_pos = 1
+        end
+    else
+        if anim_pos < 1 then
+            anim_pos = 1
+        elseif anim_pos > total_positions - 1 then
+            anim_pos = total_positions - 1
+        end
+    end
+
+
+    local idx = math.floor(anim_pos) % total_positions + 1
+    local next_idx = (idx % total_positions) + 1
+
+
+    local blend = anim_pos - math.floor(anim_pos)
+    local pos1 = arrowPositionTbl[idx]
+    local pos2 = arrowPositionTbl[next_idx]
+
+    local smooth_x = pos1[1] + (pos2[1] - pos1[1]) * blend
+    local smooth_y = pos1[2] + (pos2[2] - pos1[2]) * blend
+
+    local offset_y = InR_Animation_Arrrow_Y:GetValue(req).Value
+    local arrowScale = InR_Animation_Arrrow_Scale:GetValue(req).Value
+
+    local arrow_mat = Matrix4()
+    arrow_mat:Identity()
+
+    arrow_mat:RotZ(InR_Animation_Arrrow_Rotation:GetValue(req).Value)
+    arrow_mat:Scale(arrowScale, arrowScale, 1)
+
+
+    local shrect = Shape()
+    shrect:AddRectangle(-0.1, 0.1, -0.1, 0.1, 0.01, 8)
+    shrect = shrect:OutlineOfShape(r_thickness, outlinetypes[r_linetype], "OJT_Round",
+        (req:IsQuick() and 8 or 16))
+
+    -- Create the animated arrow shape
+    animatedArrow:MoveTo(0, 0)
+    animatedArrow:LineTo(-0.05 * globalScale, -0.05 * globalScale)
+    animatedArrow:LineTo(0.05 * globalScale, -0.05 * globalScale)
+    animatedArrow:LineTo(0, 0)
+
+
+    arrow_mat:Move(smooth_x, smooth_y + offset_y, 0)
+    animatedArrow = animatedArrow:TransformOfShape(arrow_mat)
+    shrect = shrect:TransformOfShape(arrow_mat)
+
+
+    -- Final matrix
+
+    local timeline_mat = Matrix4()
+    timeline_mat:Identity()
+    timeline_mat:Move(r_X, r_Y, 0)
+    timeline_mat:RotZ(InR_Rotation:GetValue(req).Value)
+    timeline_mat:Scale(r_S, r_S, 1)
+
+    outputShape:AddShape(Lines_Holder, true)
+
+    -- Add the animated arrow shape
+    if InR_PointerShape:GetValue(req).Value == 0 then
+        -- None State
+    elseif InR_PointerShape:GetValue(req).Value == 1 then
+        outputShape:AddShape(animatedArrow, true)
+    elseif InR_PointerShape:GetValue(req).Value == 2 then
+        local customShape = tbl_Shape[2] or Shape()
+        customShape = customShape:TransformOfShape(arrow_mat)
+        outputShape:AddShape(customShape, true)
+    end
+
+
+    outputShape = outputShape:TransformOfShape(timeline_mat)
+
+    local shapeTable = { sh, outputShape }
+
+    -- Next version to support color
+    OutScriptValTimeShape:Set(req, ScriptValParam(shapeTable))
+end

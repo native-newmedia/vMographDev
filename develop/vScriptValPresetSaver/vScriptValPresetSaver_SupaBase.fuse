@@ -1,0 +1,447 @@
+-- ============================================================================
+-- version
+-- ============================================================================
+version         = "v1.00 - Date"
+-- ============================================================================
+-- modules
+-- ============================================================================
+local ffi       = require("ffi")
+local curl      = require("lj2curl")
+local json      = require("dkjson") -- or use cjson if available
+local jsonutils = self and require("vjsonutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME       = "vScriptValPresetSaverSBase"
+DATATYPE        = "Text"
+
+-- ============================================================================
+-- SUPABASE CONFIGURATION
+-- ============================================================================
+local SUPABASE_URL = "https://nlforuyacekwtqzqpbkf.supabase.co"
+local SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sZm9ydXlhY2Vrd3RxenFwYmtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NTc4MjUsImV4cCI6MjA2ODEzMzgyNX0.2efiwWNKNPEMWH96R67J6Kc0vvnyH3EplAB51uvuYIs"
+local TABLE_NAME = "fusion_presets"  -- Table name for storing presets
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+REGID_DataType      = DATATYPE,
+REGID_InputDataType = DATATYPE,
+REG_NoCommonCtrls   = true,
+REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+REGS_Name           = FUSE_NAME,
+REGS_OpDescription  = "Save Fusion presets to Supabase database.",
+REGS_OpIconString   = FUSE_NAME,
+REG_TimeVariant     = true,
+REG_Unpredictable   = true,
+REGS_IconID         = "Icons.Tools.Icons.StickyNote",
+})
+
+-- ============================================================================
+-- UTILITY FUNCTIONS
+-- ============================================================================
+
+function flatten_script_string(src)
+    -- Ensure it's a string
+    if type(src) ~= "string" then return "" end
+    
+    -- Remove leading/trailing whitespace
+    local result = src:match("^%s*(.-)%s*$")
+    
+    -- Collapse all newlines and excessive spacing
+    result = result:gsub("%s+", " ")         -- All whitespace to space
+    result = result:gsub(",%s+", ", ")       -- Tidy comma spacing
+    result = result:gsub("{%s+", "{ ")       -- Open brace
+    result = result:gsub("%s+}", " }")       -- Close brace
+    result = result:gsub("%s+=", " =")       -- Left spacing around =
+    result = result:gsub("=%s+", "= ")       -- Right spacing around =
+    
+    return result
+end
+
+-- Simple test function to verify Supabase connection
+local function testSupabaseConnection()
+    print("=== Testing Supabase Connection ===")
+    
+    local url = SUPABASE_URL .. "/rest/v1/" .. TABLE_NAME .. "?limit=1"
+    local cmd = string.format('curl -s --max-time 10 -w "HTTP_CODE:%%{http_code}" -H "Authorization: Bearer %s" -H "apikey: %s" "%s"',
+        SUPABASE_ANON_KEY,
+        SUPABASE_ANON_KEY,
+        url
+    )
+    
+    print("Testing URL:", url)
+    
+    local handle = io.popen(cmd)
+    if not handle then
+        print("ERROR: Could not execute curl")
+        return false
+    end
+    
+    local result = handle:read("*a")
+    handle:close()
+    
+    print("Test result:", result)
+    
+    local http_code = result:match("HTTP_CODE:(%d+)")
+    if http_code == "200" then
+        print("SUCCESS: Connection to Supabase working!")
+        return true
+    else
+        print("ERROR: HTTP " .. (http_code or "unknown"))
+        return false
+    end
+end
+
+local function sendToSupabase(presetData)
+    print("=== Sending to Supabase ===")
+    
+    -- Validate required fields
+    if not presetData.preset_name or presetData.preset_name == "" then
+        print("ERROR: Preset name is required")
+        return false, "ERROR: Preset name is required"
+    end
+    
+    if not presetData.fusion_script or presetData.fusion_script == "" then
+        print("ERROR: Fusion script is required")
+        return false, "ERROR: Fusion script is required"
+    end
+    
+    -- Build JSON payload using proper JSON encoding
+    local json_data = {
+        preset_name = presetData.preset_name,
+        description = presetData.description or "",
+        category = presetData.category or "General",
+        fusion_script = presetData.fusion_script,
+        image_base64 = presetData.image_base64 or "",
+        created_by = presetData.created_by or "Fusion User"
+    }
+    
+    local json_payload = json.encode(json_data)
+    
+    print("JSON payload created")
+    print("Preset name:", presetData.preset_name)
+    print("Category:", presetData.category)
+    print("Payload size:", string.len(json_payload), "bytes")
+    
+    -- Escape JSON for shell command
+    local function escapeForShell(str)
+        str = str:gsub('\\', '\\\\')
+        str = str:gsub('"', '\\"')
+        str = str:gsub('`', '\\`')
+        str = str:gsub('%$', '\\$')
+        str = str:gsub('\n', '\\n')
+        str = str:gsub('\r', '\\r')
+        str = str:gsub('\t', '\\t')
+        return str
+    end
+    
+    local escaped_payload = escapeForShell(json_payload)
+    
+    -- Supabase REST API endpoint
+    local url = SUPABASE_URL .. "/rest/v1/" .. TABLE_NAME
+    
+    -- Use curl command
+    local cmd = string.format([[curl -s --max-time 30 -w "HTTP_CODE:%%{http_code}" -X POST -H "Content-Type: application/json" -H "Authorization: Bearer %s" -H "apikey: %s" -H "Prefer: return=representation" -d "%s" "%s"]],
+        SUPABASE_ANON_KEY,
+        SUPABASE_ANON_KEY,
+        escaped_payload,
+        url
+    )
+    
+    print("Executing curl command...")
+    print("URL:", url)
+    
+    -- Execute curl command
+    local handle = io.popen(cmd .. " 2>&1")
+    if not handle then
+        local error_msg = "ERROR: Failed to execute curl command"
+        print(error_msg)
+        return false, error_msg
+    end
+    
+    local result = handle:read("*a")
+    local exit_code = handle:close()
+    
+    print("Raw result:", result)
+    
+    if not result or result == "" then
+        local error_msg = "ERROR: Empty response from curl"
+        print(error_msg)
+        return false, error_msg
+    end
+    
+    -- Parse response
+    local http_code = result:match("HTTP_CODE:(%d+)")
+    local response_body = result:gsub("HTTP_CODE:%d+", ""):gsub("^%s*", ""):gsub("%s*$", "")
+    
+    print("HTTP Status:", http_code or "unknown")
+    print("Response body:", response_body)
+    
+    if not http_code then
+        local error_msg = "ERROR: Could not parse HTTP status code. Raw response: " .. result
+        print(error_msg)
+        return false, error_msg
+    end
+    
+    if http_code == "201" or http_code == "200" then
+        local success_msg = "SUCCESS: Preset saved to Supabase!"
+        print(success_msg)
+        return true, success_msg
+    else
+        local error_msg = "ERROR: HTTP " .. http_code .. " - " .. response_body
+        print(error_msg)
+        return false, error_msg
+    end
+end
+
+-- ============================================================================
+-- CREATE INTERFACE
+-- ============================================================================
+
+function Create()
+    -- [[ Creates the user interface. ]]
+    InText = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1
+    })
+
+    -- Display the image
+    InLabel = self:AddInput("", 'Label', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InImageCode = self:AddInput("imageCode", 'imageCode', {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        INP_External = false,
+        LBLC_MultiLine = true,
+        INP_Passive = true,
+        TEC_Lines = 3,
+        TEC_Visible = true,
+        TEC_Wrap = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    Inline1Separator1 = self:AddInput("line1Separator1", "line1Separator1", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    -- Preset Title/Name
+    InLabel2 = self:AddInput("Preset Name", 'Label2', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InPresetName = self:AddInput("Preset Name", "PresetName", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        INP_External = false,
+        LBLC_MultiLine = false,
+        TEC_Lines = 1,
+        TEC_Visible = true,
+        TEC_Wrap = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    -- Category/Tags
+    InLabel4 = self:AddInput("Category/Tags", 'Label4', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InCategory = self:AddInput("Category", "Category", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        INP_External = false,
+        LBLC_MultiLine = false,
+        TEC_Lines = 1,
+        TEC_Visible = true,
+        TEC_Wrap = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InLabel3 = self:AddInput("Description", 'Label3', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InDescription = self:AddInput("Description", "Description", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        INP_External = false,
+        LBLC_MultiLine = true,
+        TEC_Lines = 2,
+        TEC_Visible = true,
+        TEC_Wrap = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InLabel1 = self:AddInput("Paste Copied Tools", 'Label1', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InPasteTools = self:AddInput("Paste Copied Tools", "PasteTools", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        TEC_Lines = 10,
+        LBLC_MultiLine = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+        TEC_Wrap = true,
+    })
+
+    Inline1Separator2 = self:AddInput("line1Separator2", "line1Separator_2", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    TestConnection_Button = self:AddInput("Test Connection", "TestConnection", {
+        LINKS_Name = "Test Supabase Connection",
+        LINKID_DataType = "Number", 
+        INPID_InputControl = "ButtonControl",
+        INP_DoNotifyChanged = true,
+    })
+
+    SendToSupabase_Button = self:AddInput("Save to Supabase", "SendSupabase", {
+        LINKS_Name = "Save to Supabase",
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ButtonControl",
+        INP_DoNotifyChanged = true,
+    })
+
+    self:BeginControlNest("Server Response", "ConnectionSettings", false, {})
+    InResponse = self:AddInput("Server Response", "Response", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        INP_External = false,
+        LBLC_MultiLine = true,
+        TEC_Lines = 3,
+        TEC_Visible = true,
+        TEC_Wrap = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    self:EndControlNest()
+
+    OutText = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1
+    })
+end
+
+-- ============================================================================
+-- EVENT HANDLERS
+-- ============================================================================
+
+function NotifyChanged(inp, param, time)
+    local ok, err = pcall(function()
+        if inp == TestConnection_Button then
+            if param.Value == 1.0 then
+                print("=== Testing Supabase Connection ===")
+                local success = testSupabaseConnection()
+                local message = success and "Connection test successful!" or "Connection test failed - check console for details"
+                InResponse:SetSource(Text(message), 0)
+            end
+        elseif inp == SendToSupabase_Button then
+            if param.Value == 1.0 then
+                print("=== Save to Supabase Triggered ===")
+                
+                -- Get all the input values
+                local preset_name = self:FindInput("PresetName"):GetSource(time, 0).Value or ""
+                local description = self:FindInput("Description"):GetSource(time, 0).Value or ""
+                local category = self:FindInput("Category"):GetSource(time, 0).Value or "General"
+                local fusion_script = self:FindInput("PasteTools"):GetSource(time, 0).Value or ""
+                local image_code = self:FindInput("imageCode"):GetSource(time, 0).Value or ""
+                
+                -- Clean and prepare the fusion script
+                local cleaned_script = flatten_script_string(fusion_script)
+                
+                -- Create the preset data object
+                local presetData = {
+                    preset_name = preset_name,
+                    description = description,
+                    category = category,
+                    fusion_script = cleaned_script,
+                    image_base64 = image_code,
+                    created_by = "Fusion User"
+                }
+                
+                -- Send to Supabase
+                local success, response_message = sendToSupabase(presetData)
+                
+                -- Update the response field
+                InResponse:SetSource(Text(response_message), 0)
+                
+                if success then
+                    print("Preset saved successfully!")
+                else
+                    print("Failed to save preset:", response_message)
+                end
+            end
+        end
+    end)
+    
+    if not ok then
+        local error_msg = "Error: " .. tostring(err)
+        print(error_msg)
+        InResponse:SetSource(Text(error_msg), 0)
+    end
+end
+
+function OnConnected(inp, old, new)
+    if inp == InText and new ~= nil then
+        -- New connection
+    else
+        InLabel:SetSource("", 0)
+    end
+end
+
+function OnAddToFlow()
+    InLabel:SetSource("", 0)
+end
+
+function Process(req)
+    -- [[ Creates the output. ]]
+    local txt_str = InText:GetValue(req).Value or ""
+    
+    local html_str = "<img  src='data:image/png;base64," .. tostring(txt_str) .. "'/><br>"
+    local img_str = "data:image/png;base64," .. tostring(txt_str)
+    InImageCode:SetSource(Text(tostring(img_str)), 0)
+    
+    InLabel:SetSource(Text(html_str), 0)
+    
+    local out = Text(html_str)
+    OutText:Set(req, out)
+end

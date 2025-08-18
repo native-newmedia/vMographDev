@@ -1,0 +1,843 @@
+--[[--
+spriteSheet_extractor.Fuse
+by Bryan Ray for Muse VFX
+
+Converts a sprite sheet into an image sequence
+
+version 1.0
+December 3, 2019
+--]] --
+
+
+FuRegisterClass("SpriteSheet_Text", CT_Tool, {
+    REGS_Name             = "SpriteSheetText",
+    REGS_Category         = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_OpIconString     = "ss",
+    REGS_OpDescription    = "Sprite Sheet Extractor-text",
+    REG_OpNoMask          = true,
+    REG_NoBlendCtrls      = true,
+    REG_NoObjMatCtrls     = true,
+    REG_NoMotionBlurCtrls = true,
+    REG_NoPreCalcProcess  = true,
+    REG_TimeVariant       = true,
+    REG_Version           = 100,
+})
+
+
+
+-- SpriteFontText.fuse
+
+FuRegisterClass("SpriteFontText", CT_Tool, {
+    REGS_Category = "Fuses",
+    REGS_OpIconString = "TXT",
+    REGS_OpDescription = "Custom Sprite Font Text",
+    REGS_Company = "User",
+    REGS_URL = "",
+    REGID_DataType = "Image",
+
+    -- Input Port Groups
+    REG_OpNoMask = true,
+    REG_NoBlendCtrls = true
+})
+
+function Create()
+    InText = self:AddInput("Text", "Text", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        INPS_DefaultText = "HELLO"
+    })
+
+
+    InOffsetLo = self:AddInput("Start", "OffsetLow", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "RangeControl",
+        RNGCS_MidName      = "Write On",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 0,
+        IC_ControlGroup    = 3,
+        IC_ControlID       = 0,
+        INP_MinAllowed     = 0.0,
+        INP_MaxAllowed     = 1.0,
+
+    })
+    InOffsetHi = self:AddInput("End", "OffsetHigh", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "RangeControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        IC_ControlGroup    = 3,
+        IC_ControlID       = 1,
+        INP_MinAllowed     = 0.0,
+        INP_MaxAllowed     = 1.0,
+    })
+    InColumns = self:AddInput("Columns", "Columns", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 6,
+        INP_MinScale = 1,
+        INP_MaxScale = 10,
+        INP_Integer = true,
+    })
+
+    InRows = self:AddInput("Rows", "Rows", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 8,
+        INP_MinScale = 1,
+        INP_MaxScale = 10,
+        INP_Integer = true,
+    })
+
+    InCellSize = self:AddInput("Cell Size", "CellSize", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 64,
+        INP_MinScale = 1,
+        INP_MaxScale = 512,
+        INP_Integer = true,
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+
+    InCellWidth = self:AddInput("Cell Width", "CellWidth", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 140,
+        INP_MinScale = 1,
+        INP_MaxScale = 512,
+        --INP_Integer = true,
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+
+    InCellHeight = self:AddInput("Cell Height", "CellHeight", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 145,
+        INP_MinScale = 1,
+        INP_MaxScale = 512,
+        --INP_Integer = true,
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+
+    InPadding = self:AddInput("Padding", "Padding", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0,
+        INP_MinScale = 0,
+        INP_MaxScale = 32,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+
+    InCharSpacing = self:AddInput("Character Spacing", "CharSpacing", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0,
+        INP_MinScale = -256,
+        INP_MaxScale = 256,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+    })
+
+
+    InLineSpacing = self:AddInput("Line Spacing", "LineSpacing", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0,
+        INP_MinScale = -256,
+        INP_MaxScale = 256,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+    })
+    InSpaceWidth = self:AddInput("Space Width Multiplier", "SpaceWidth", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.5,
+        INP_MinScale = 0.1,
+        INP_MaxScale = 2.0,
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+
+
+    InMaxWidth = self:AddInput("Max Line Width (px)", "MaxWidth", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 2000,
+        INP_MinScale = 32,
+        INP_MaxScale = 4096,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+    })
+    InSize = self:AddInput("Size", "size", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1,
+        INP_MinScale = 0.1,
+        INP_MaxScale = 1,
+    })
+
+    InStyleProbability = self:AddInput("Style Probability", "StyleProbability", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 0.0,
+    })
+    InSeed = self:AddInput("Seed", "Seed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        TEC_Lines = 1,
+        INP_MinScale = 0,
+        INP_MaxScale = 1,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+        INP_Default = 0,
+
+    })
+
+    InAlignment = self:AddInput("Alignment", "Alignment", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        { MBTNC_AddButton = "Left",   MBTNCD_ButtonWidth = 1 / 3, },
+        { MBTNC_AddButton = "Center", MBTNCD_ButtonWidth = 1 / 3, },
+        { MBTNC_AddButton = "Right",  MBTNCD_ButtonWidth = 1 / 3, },
+        INP_Integer = true,
+        INP_SplineType = "StepIn",
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+
+    InCenter = self:AddInput("Center", "Center", {
+        LINKID_DataType = "Point",
+        INPID_InputControl = "OffsetControl",
+        INPID_PreviewControl = "CrosshairControl",
+    })
+
+    self:BeginControlNest("Translation", "Translation", false, { LBLC_PickButton = false })
+    TranslateX = self:AddInput("X Offset", "Translate.X", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        --IC_Visible = false, PC_Visible = false
+    })
+    TranslateY = self:AddInput("Y Offset", "Translate.Y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        --IC_Visible = false, PC_Visible = false
+    })
+    TranslateZ = self:AddInput("Z Offset", "Translate.Z", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        --IC_Visible = false, PC_Visible = false
+    })
+    RotateZ = self:AddInput("Z Rotation", "Rotate.Z", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_MaxScale = 360.0,
+        --IC_Visible = false, PC_Visible = false
+    })
+    ScaleX = self:AddInput("Scale", "Scale.X", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = false,
+        INP_Default = 1.0,
+        -- IC_Visible = false, PC_Visible = false
+    })
+    self:EndControlNest()
+
+    InDebugMode = self:AddInput("Debug Mode", "DebugMode", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Default = 0,
+        INP_DoNotifyChanged = true,
+        --IC_Visible = false, PC_Visible = false
+    })
+    -------------DRAW ON TRANSPARENT-------------
+
+    InOnBlack = self:AddInput("Draw on Transparent Background", "OnBlack", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Default        = 0,
+    })
+
+    InSourceImage = self:AddInput("Source Image", "SourceImage", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1
+    })
+    InSpriteImage_1 = self:AddInput("Sprite Sheet 1", "sprite_Sheet1", {
+        LINKID_DataType = "Image",
+        LINK_Main = 2,
+    })
+    InSpriteImage_2 = self:AddInput("Sprite Sheet 2", "sprite_Sheet2", {
+        LINKID_DataType = "Image",
+        LINK_Main = 3,
+    })
+    InSpriteImage_3 = self:AddInput("Sprite Sheet 3", "sprite_Sheet3", {
+        LINKID_DataType = "Image",
+        LINK_Main = 4,
+    })
+
+    OutImage = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+local gridTable = {
+    ["A"] = { position = 1, grid = { 0, 0 } },
+    ["B"] = { position = 2, grid = { 0, 1 } },
+    ["C"] = { position = 3, grid = { 0, 2 } },
+    ["D"] = { position = 4, grid = { 0, 3 } },
+    ["E"] = { position = 5, grid = { 0, 4 } },
+    ["F"] = { position = 6, grid = { 0, 5 } },
+    ["G"] = { position = 7, grid = { 1, 0 } },
+    ["H"] = { position = 8, grid = { 1, 1 } },
+    ["I"] = { position = 9, grid = { 1, 2 } },
+    ["J"] = { position = 10, grid = { 1, 3 } },
+    ["K"] = { position = 11, grid = { 1, 4 } },
+    ["L"] = { position = 12, grid = { 1, 5 } },
+    ["M"] = { position = 13, grid = { 2, 0 } },
+    ["N"] = { position = 14, grid = { 2, 1 } },
+    ["O"] = { position = 15, grid = { 2, 2 } },
+    ["P"] = { position = 16, grid = { 2, 3 } },
+    ["Q"] = { position = 17, grid = { 2, 4 } },
+    ["R"] = { position = 18, grid = { 2, 5 } },
+    ["S"] = { position = 19, grid = { 3, 0 } },
+    ["T"] = { position = 20, grid = { 3, 1 } },
+    ["U"] = { position = 21, grid = { 3, 2 } },
+    ["V"] = { position = 22, grid = { 3, 3 } },
+    ["W"] = { position = 23, grid = { 3, 4 } },
+    ["X"] = { position = 24, grid = { 3, 5 } },
+    ["Y"] = { position = 25, grid = { 4, 0 } },
+    ["Z"] = { position = 26, grid = { 4, 1 } },
+    ["1"] = { position = 27, grid = { 4, 2 } },
+    ["2"] = { position = 28, grid = { 4, 3 } },
+    ["3"] = { position = 29, grid = { 4, 4 } },
+    ["4"] = { position = 30, grid = { 4, 5 } },
+    ["5"] = { position = 31, grid = { 5, 0 } },
+    ["6"] = { position = 32, grid = { 5, 1 } },
+    ["7"] = { position = 33, grid = { 5, 2 } },
+    ["8"] = { position = 34, grid = { 5, 3 } },
+    ["9"] = { position = 35, grid = { 5, 4 } },
+    ["0"] = { position = 36, grid = { 5, 5 } },
+
+    ["."] = { position = 37, grid = { 6, 0 } },
+    [","] = { position = 38, grid = { 6, 1 } },
+    ["-"] = { position = 39, grid = { 6, 2 } },
+    ["!"] = { position = 40, grid = { 6, 3 } },
+    ["?"] = { position = 41, grid = { 6, 4 } },
+    ["@"] = { position = 42, grid = { 6, 5 } },
+    ["%"] = { position = 43, grid = { 7, 0 } },
+    [" "] = { position = 44, grid = { 7, 1 } },
+    [";"] = { position = 45, grid = { 7, 2 } },
+    ["*"] = { position = 46, grid = { 7, 3 } }
+}
+
+
+--[[ABCDEF
+GHIJKL
+MNOPQR
+STUVWX
+YZ1234
+567890
+.,-!?@
+%;*
+
+--]]
+
+function scaleImage(inputImg, scaleX, scaleY, filter, window)
+    local src_width = inputImg.OriginalWidth
+    local src_height = inputImg.OriginalHeight
+
+    local img_width = math.max(math.floor(src_width * scaleX), 1)
+    local img_height = math.max(math.floor(src_height * scaleY), 1)
+
+    local outputImg = Image({ IMG_Like = inputImg, IMG_Width = img_width, IMG_Height = img_height })
+
+    inputImg:Resize(outputImg, {
+        RSZ_Filter = filter or "BiLinear",
+        RSZ_Window = window or "Hanning",
+        RSZ_Width = img_width,
+        RSZ_Height = img_height,
+    })
+
+    return outputImg
+end
+
+function Process(req)
+    -- Get input images
+    local img_spriteSheet1 = InSpriteImage_1:GetValue(req)
+    local img_spriteSheet2 = InSpriteImage_2:GetValue(req)
+    local img_spriteSheet3 = InSpriteImage_3:GetValue(req)
+
+    local sourceImg = InSourceImage:GetValue(req)
+    local size = InSize:GetValue(req).Value
+
+    -- Error handling for missing inputs
+    if not img_spriteSheet1 or not sourceImg then
+        local out = Image { IMG_Like = req }
+        OutImage:Set(req, out)
+        return
+    end
+
+
+    -- Add Image Scaling here
+    ------------------------------------------------------------------------------------
+    local filters = {
+        "Nearest",
+        "Box",
+        "BiLinear",
+        "BiCubic",
+        "BSpline",
+        "CatmulRom",
+        "Gaussian",
+        "Mitchell",
+        "Lanczos",
+        "Sinc",
+        "Bessel"
+    }
+    local windows = { "Hanning", "Hamming", "Blackman" }
+
+    local sizex = size -- assume `size` is a scalar scale factor
+    local sizey = size
+
+    --if size ~= 1 then
+    local filter = filters[3] -- BiLinear
+    local window = windows[1] -- Hanning
+
+    local spriteSheet1 = scaleImage(img_spriteSheet1, sizex, sizey, filter, window)
+    local spriteSheet2 = scaleImage(img_spriteSheet2, sizex, sizey, filter, window)
+    local spriteSheet3 = scaleImage(img_spriteSheet3, sizex, sizey, filter, window)
+    --end
+
+
+    ------------------------------------------------------------------------------------
+
+
+
+    -- Create output image
+    local out     = sourceImg:CopyOf()
+
+    ----------------------------DRAW ON TRANSPARENT-------------------------------------
+    local onblack = (InOnBlack:GetValue(req).Value > 0.5)
+    if onblack then
+        out:Fill(Pixel({ R = 0, G = 0, B = 0, A = 0 }))
+        out:Clear()
+    end
+
+    ------------------------------------------------------------------------------------
+
+
+    -- Get input parameters
+    local text = InText:GetValue(req).Value or ""
+
+    local offsetLo = InOffsetLo:GetValue(req).Value
+    local offsetHi = InOffsetHi:GetValue(req).Value
+
+
+    local cellSizeX = InCellWidth:GetValue(req).Value
+    local cellSizeY = InCellHeight:GetValue(req).Value
+    local padding = InPadding:GetValue(req).Value
+    local center = InCenter:GetValue(req)
+    local charSpacing = InCharSpacing:GetValue(req).Value
+    local lineSpacing = InLineSpacing:GetValue(req).Value
+    local maxWidth = InMaxWidth:GetValue(req).Value
+    local alignment = InAlignment:GetValue(req).Value
+    local debugMode = InDebugMode:GetValue(req).Value or false
+
+    local rows = InRows:GetValue(req).Value
+    local columns = InColumns:GetValue(req).Value
+
+
+    -- Calculate dimensions
+    local cellSizeWithPaddingX = cellSizeX + padding
+    local cellSizeWithPaddingY = cellSizeY + padding
+    local imgWidth = spriteSheet1.Width
+    local imgHeight = spriteSheet1.Height
+    local canvasWidth = out.Width
+    local canvasHeight = out.Height
+    local spacePerChar = cellSizeX + charSpacing
+    local spaceWidth = spacePerChar * 0.5 -- Special width for space character
+
+
+    local _translateX = TranslateX:GetValue(req).Value
+    local _translateY = TranslateY:GetValue(req).Value
+    local _translateZ = TranslateZ:GetValue(req).Value
+
+    local _rotationZ  = RotateZ:GetValue(req).Value * (math.pi * 200) / 360.0
+
+    local _scaleX     = ScaleX:GetValue(req).Value
+    local _scaleY     = _scaleX
+
+
+    -- Calculate sprite dimensions
+    local spriteWidth = spriteSheet1.Width / columns
+    local spriteHeight = spriteSheet1.Height / rows
+
+    -- Seed the random number generator
+    local seed = InSeed:GetValue(req).Value
+    math.randomseed(seed)
+    -- Function to generate a random float between -1 and 1
+
+    debugMode = false
+
+    if debugMode then
+        print("SpriteFontText: Starting processing")
+    end
+
+
+    -- Debug character map
+    local charMapStr = ""
+    for k, _ in pairs(gridTable) do
+        if #k == 1 then -- Only add single characters
+            charMapStr = charMapStr .. k
+        end
+    end
+    if debugMode then
+        print("SpriteFontText: Character map: " .. charMapStr)
+    end
+
+    -- Step 1: Split text into lines based on max width
+    local lines = splitTextIntoLines(text, maxWidth, spacePerChar, spaceWidth)
+    if debugMode then
+        print("SpriteFontText: Text split into " .. #lines .. " lines")
+    end
+
+    -- Step 2: Calculate character positions
+    local renderInfo = calculateCharacterPositions(
+        lines,
+        cellSizeX,
+        cellSizeY,
+        charSpacing,
+        lineSpacing,
+        spaceWidth,
+        spacePerChar,
+        alignment,
+        center,
+        canvasWidth,
+        canvasHeight,
+        gridTable,
+        debugMode
+    )
+
+    -- Step 3: Render characters
+
+    -- local out2 = sourceImg:CopyOf()
+    -- out2:Fill(Pixel({ R = 0.2, G = 1, B = 0, A = 1 }))
+
+    local sheets = { spriteSheet1, spriteSheet2, spriteSheet3 }
+
+    local probabilityValue = InStyleProbability:GetValue(req).Value
+
+    renderCharacters(out, sheets, probabilityValue, size, renderInfo, spriteWidth, spriteHeight, rows,
+        debugMode, offsetLo, offsetHi, _translateX, _translateY, _translateZ)
+
+
+
+    if debugMode then
+        print("SpriteFontText: Processing complete")
+    end
+    -- Apply translation, rotation, and scaling to the output image if needed
+    -- Note: Fusion's Image API does not natively support geometric transforms on the whole image in-place.
+    -- You typically apply transforms when merging sprites, but for the whole output, you need to use a Transform tool in the flow.
+    -- However, you can apply translation/scale/rotation to each character in renderCharacters (by adjusting x/y/scale/rotation).
+    -- If you want to apply a global transform here, you would need to create a new image and composite the output with offsets.
+
+    -- For demonstration, here's how you might apply a translation to the output image:
+    -- (This will create a new image and merge the output onto it with an offset.)
+
+    -- if _translateX ~= 0 or _translateY ~= 0 or _translateZ ~= 0 or _rotationZ ~= 0 or _scaleX ~= 1 then
+    -- local transformed = Image({ IMG_Like = out })
+    -- transformed:Fill(Pixel({ R = 0, G = 0, B = 0, A = 0 }))
+    -- OMerge supports translation, scale, and rotation
+    --transformed:OMerge(out, _translateX * 100, _translateY * 100)
+
+    -- transformed = transformed:MergeOf(out, {
+    --     --  MO_ApplyMode = "Merge",
+    --     MO_Alpha = true, -- Enable alpha blending
+    --   --  MO_XSize = _scaleX,
+    --   --  MO_YSize = _scaleX,
+    --     MO_XOffset = _translateX,
+    --     MO_YOffset = _translateY,
+    -- })
+    -- if self.Status == "OK" then
+    -- out = out:Transform(nil,
+    -- { XF_XSize = _scaleX, XF_YSize = _scaleY, XF_XOffset = _translateX, XF_YOffset = _translateY })
+    --  end
+    OutImage:Set(req, out)
+end
+
+function randomInRange(min, max)
+    return min + (max - min) * math.random()
+end
+
+function trimArray(array, sliderStart, sliderEnd)
+    local n = #array
+    -- Clamp the slider values between 0 and 1
+    sliderStart = math.max(0, math.min(1, sliderStart))
+    sliderEnd = math.max(0, math.min(1, sliderEnd))
+
+    -- Convert to array indices
+    local startIndex = math.floor(sliderStart * n) + 1
+    local endIndex = math.floor(sliderEnd * n)
+
+    -- Prevent overflow
+    if endIndex > n then endIndex = n end
+    if startIndex > endIndex then startIndex = endIndex end
+
+    -- Extract the subarray
+    local trimmed = {}
+    for i = startIndex, endIndex do
+        table.insert(trimmed, array[i])
+    end
+
+    return trimmed
+end
+
+-- Split text into lines based on max width
+function splitTextIntoLines(text, maxWidth, spacePerChar, spaceWidth)
+    local lines = {}
+    local currentLine = ""
+    local lineWidth = 0
+
+    for i = 1, #text do
+        local ch = text:sub(i, i)
+        local isSpace = (ch == " ")
+        local charWidth = isSpace and spaceWidth or spacePerChar
+
+        if ch == "\n" or (lineWidth + charWidth > maxWidth and #currentLine > 0) then
+            table.insert(lines, currentLine)
+            currentLine = ch == "\n" and "" or ch
+            lineWidth = isSpace and spaceWidth or spacePerChar
+        else
+            currentLine = currentLine .. ch
+            lineWidth = lineWidth + charWidth
+        end
+    end
+
+    if #currentLine > 0 then
+        table.insert(lines, currentLine)
+    end
+
+    return lines
+end
+
+-- Calculate position for each character
+function calculateCharacterPositions(lines, cellSizeX, cellSizeY, charSpacing, lineSpacing,
+                                     spaceWidth, spacePerChar, alignment, center,
+                                     canvasWidth, canvasHeight, gridTable, debugMode)
+    local renderInfo = {}
+    local totalHeight = #lines * (cellSizeY + lineSpacing) - lineSpacing -- Subtract extra line spacing
+
+    -- Calculate the starting Y position for properly centered text
+    --local startY = center.Y * canvasHeight - totalHeight / 2
+    local startY = center.Y * canvasHeight
+
+    if debugMode then
+        print("SpriteFontText: Center Y: " .. center.Y * canvasHeight)
+        print("SpriteFontText: Total height: " .. totalHeight)
+        print("SpriteFontText: Start Y position: " .. startY)
+    end
+
+    for li = 1, #lines do
+        local line = lines[li]
+
+        -- Calculate line pixel width
+        local linePixelWidth = 0
+        for ci = 1, #line do
+            local ch = line:sub(ci, ci)
+            linePixelWidth = linePixelWidth + ((ch == " ") and spaceWidth or spacePerChar)
+        end
+        linePixelWidth = linePixelWidth - charSpacing -- Subtract trailing spacing
+
+        -- Calculate starting X position based on alignment
+        local startX = 0
+        if alignment == "Left" then
+            startX = 0
+        elseif alignment == "Center" then
+            startX = -math.floor(linePixelWidth / 2)
+        elseif alignment == "Right" then
+            startX = -linePixelWidth
+        end
+
+        local baseX = math.floor(center.X * canvasWidth + startX)
+
+        -- Calculate Y position: properly centered around the middle
+        -- local yPos = startY + (li - 1) * (cellSizeY + lineSpacing) -- Changed from subtraction to addition
+
+        local yPos = startY - (li - 1) * (cellSizeY + lineSpacing)
+
+        local xPos = baseX
+
+        if debugMode then
+            print("SpriteFontText: Line " .. li .. ": " .. line .. " at y=" .. yPos)
+        end
+
+        for ci = 1, #line do
+            local ch = line:sub(ci, ci):upper() -- Convert to uppercase for lookup
+            local isSpace = (ch == " ")
+
+            if not isSpace then
+                -- Get grid position from gridTable
+                local gridInfo = gridTable[ch]
+
+                if gridInfo then
+                    -- Add to render info
+                    table.insert(renderInfo, {
+                        char = ch,
+                        pos = gridInfo.position,
+                        x = xPos,
+                        y = yPos,
+                        col = gridInfo.grid[2],
+                        row = gridInfo.grid[1]
+                    })
+
+                    if debugMode then
+                        print("SpriteFontText: Character '" ..
+                            ch .. "' at position " .. gridInfo.position .. " screen pos: " .. xPos .. "," .. yPos)
+                    end
+                else
+                    -- Use fallback character
+                    if debugMode then
+                        print("SpriteFontText: Using fallback for character '" .. ch .. "'")
+                    end
+
+                    local fallbackChar = "*"
+                    local fallback = gridTable[fallbackChar]
+
+                    if fallback then
+                        table.insert(renderInfo, {
+                            char = fallbackChar,
+                            pos = fallback.position,
+                            x = xPos,
+                            y = yPos,
+                            col = fallback.grid[2],
+                            row = fallback.grid[1]
+                        })
+                    end
+                end
+            end
+
+            -- Advance position
+            xPos = xPos + (isSpace and spaceWidth or spacePerChar)
+        end
+    end
+
+    return renderInfo
+end
+
+function trim_array_loop(arr, _start, _end, _continuous)
+    local trimmed = {}
+    local arr_len = #arr
+
+    -- Handle cases where start or end is out of bounds
+    _start = math.max(1, _start)
+    _end = math.max(_start, _end) -- Ensure _end >= _start
+    local index = 0
+    -- Iterate through elements and add them to the trimmed array
+    for i = _start, _end do
+        if _continuous == true then
+            -- Use modulo to wrap around the array indices
+            index = ((i - 1) % arr_len) + 1
+        else
+            index = i
+        end
+
+        trimmed[#trimmed + 1] = arr[index]
+    end
+
+    return trimmed
+end
+
+---[[
+function renderCharacters(out2, spriteSheets, probability, scale, renderInfo, spriteWidth, spriteHeight, rows, debugMode,
+                          offsetLo, offsetHi, _translateX, _translateY, _translateZ)
+    -- Create temporary sprite image
+    local spriteImg = Image({
+        IMG_Like = spriteSheets[1],
+        IMG_Width = math.ceil(spriteWidth),
+        IMG_Height = math.ceil(spriteHeight),
+    })
+
+    --local result = trim_array_loop(renderInfo, offsetLo + 0, offsetHi + 0, false)
+    local trimmed_renderInfo = trimArray(renderInfo, offsetLo, offsetHi)
+
+
+    for _, charInfo in ipairs(trimmed_renderInfo) do
+        if charInfo.pos >= offsetLo and charInfo.pos <= offsetHi then
+            --print(charInfo.pos, charInfo.char)
+        end
+
+        -- Select sprite sheet based on probability for each character
+
+        local selectedSheetIndex
+        --local randValue = rand --math.random()
+        local randValue = randomInRange(0, 1)
+
+        -- Adjust sheet selection based on the probability slider
+        -- Lower probability favors sheet 1, higher probability favors sheet 3
+        if probability < 0.5 then
+            -- At probability=0, sheet1:sheet2:sheet3 ratio is roughly 80:15:5
+            -- At probability=0.5, ratio becomes more balanced 33:33:33
+            if randValue < 0.8 - 0.47 * probability then
+                selectedSheetIndex = 1
+            elseif randValue < 0.95 - 0.29 * probability then
+                selectedSheetIndex = 2
+            else
+                selectedSheetIndex = 3
+            end
+        else
+            -- At probability=0.5, ratio is roughly 33:33:33
+            -- At probability=1, sheet1:sheet2:sheet3 ratio is roughly 5:15:80
+            if randValue < 0.33 - 0.28 * (probability - 0.5) then
+                selectedSheetIndex = 1
+            elseif randValue < 0.67 - 0.18 * (probability - 0.5) then
+                selectedSheetIndex = 2
+            else
+                selectedSheetIndex = 3
+            end
+        end
+
+        local selectedSheet = spriteSheets[selectedSheetIndex]
+
+        -- Calculate sprite sheet coordinates
+        local cropX = spriteWidth * charInfo.col
+        local cropY = spriteHeight * (rows - charInfo.row - 1)
+
+        -- Crop the character from sprite sheet
+        selectedSheet:Crop(spriteImg, {
+            CROP_Width = spriteWidth,
+            CROP_Height = spriteHeight,
+            CROP_XOffset = cropX,
+            CROP_YOffset = cropY,
+            CROP_Alpha = true
+        })
+
+        out2:OMerge(spriteImg, charInfo.x, charInfo.y, {
+            OMERGE_Alpha = true,  -- Enable alpha blending
+            OMERGE_Mode = "Over", -- Use "Over" blending mode
+            MERGE_ScaleX = scale or 1.0,
+            MERGE_ScaleY = scale or 1.0,
+        })
+
+        -- out2 = out2:Transform(nil, { XF_XSize = _translateX, XF_YSize = _translateX, XF_XOffset = 0.5, XF_YOffset = 0.5 })
+
+        if debugMode then
+            print("SpriteFontText: Rendered '" .. charInfo.char ..
+                "' from sheet " .. selectedSheetIndex ..
+                " at position (" .. cropX .. "," .. cropY ..
+                ") to (" .. charInfo.x .. "," .. charInfo.y .. ")")
+        end
+    end
+end

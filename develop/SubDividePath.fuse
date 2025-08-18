@@ -1,0 +1,464 @@
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "SubDividePath"
+DATATYPE = "ScriptVal"
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+  REGID_DataType      = DATATYPE,
+  REGID_InputDataType = DATATYPE,
+  REG_NoCommonCtrls   = true,
+  REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_Name           = FUSE_NAME,
+  REGS_OpDescription  = "2D path smoothing",
+  REGS_OpIconString   = FUSE_NAME,
+  REGS_IconID         = "Icons.Tools.Icons.StickyNote",
+  REG_Version         = 1.5,
+})
+
+
+
+function Create()
+  InSubdivide = self:AddInput("Subdivisions", "Subdivisions", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 1,
+    INP_MinScale = 1,
+    INP_MaxScale = 80,
+    INP_Integer = true
+  })
+
+  InInterpMode = self:AddInput("Interpolation", "Interpolation", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ComboControl",
+    INP_Default = 0,
+    INP_Integer = true,
+    { CCS_AddString = "None" },
+    { CCS_AddString = "Bezier" },
+    { CCS_AddString = "B-Spline" },
+    { CCS_AddString = "Catmull-Rom" },
+    { CCS_AddString = "Cardinal" },
+    { CCS_AddString = "Cubic Hermite" },
+    { CCS_AddString = "Tension" },
+    { CCS_AddString = "Step" },
+  })
+
+  InTension = self:AddInput("Tension", "Tension", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.0,
+    INP_MinScale = -1.0,
+    INP_MaxScale = 1.0,
+    --IC_Visible = false,
+    --PC_Visible = false,
+  })
+
+  -- Make Tension visible only for Cardinal and Tension modes
+  -- self:AddControlPage("Controls")
+  -- self:BeginControlPage("Controls")
+  -- self:EndControlPage()
+
+  InScriptVal = self:AddInput("ScriptVal", "ScriptVal", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 1
+  })
+
+
+  -- The output node connection where data is pushed out of the fuse
+  OutScriptVal = self:AddOutput("Output", "Output", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 1
+  })
+end
+
+
+-- Cardinal spline interpolation - ensures curve passes through all points
+function CardinalSpline(points, tension, steps)
+  local result = {}
+  if #points < 3 then
+    return Subdivide(points, steps)
+  end
+  
+  -- Default tension: 0.5 gives a Catmull-Rom spline (often looks natural)
+  tension = tension or 0.5
+  
+  -- Determine point format - check the first point
+  local isXY = type(points[1]) == "table" and points[1].x ~= nil and points[1].y ~= nil
+  local isArray = type(points[1]) == "table" and not isXY
+  
+  -- Add first point directly
+  table.insert(result, copyPoint(points[1]))
+  
+  -- Process each segment
+  for i = 1, #points - 2 do
+    local p0 = i > 1 and points[i-1] or points[i]  -- First tangent anchor
+    local p1 = points[i]                          -- Start point
+    local p2 = points[i+1]                        -- End point
+    local p3 = i < #points-2 and points[i+2] or points[i+1]  -- Second tangent anchor
+    
+    -- Create points for this segment
+    for t = 1, steps do
+      local s = t / steps
+      local point = interpolateCardinal(p0, p1, p2, p3, s, tension, isXY, isArray)
+      table.insert(result, point)
+    end
+  end
+  
+  -- Add final point directly
+  local lastPoint = points[#points]
+  table.insert(result, copyPoint(lastPoint))
+  
+  return result
+end
+
+-- Copy point to prevent reference issues
+function copyPoint(p)
+  if type(p) == "table" then
+    if p.x ~= nil and p.y ~= nil then
+      return {x = p.x, y = p.y}
+    else
+      local copy = {}
+      for i, v in ipairs(p) do
+        copy[i] = v
+      end
+      return copy
+    end
+  else
+    return p -- For scalar values
+  end
+end
+
+-- Cardinal spline interpolation formula that handles different point formats
+function interpolateCardinal(p0, p1, p2, p3, t, tension, isXY, isArray)
+  local t2 = t * t
+  local t3 = t2 * t
+  
+  -- Handle different point formats
+  if isXY then
+    -- Points with x,y fields
+    local m1x = tension * (p2.x - p0.x)
+    local m2x = tension * (p3.x - p1.x)
+    local x = (2*t3-3*t2+1)*p1.x + (t3-2*t2+t)*m1x + (-2*t3+3*t2)*p2.x + (t3-t2)*m2x
+    
+    local m1y = tension * (p2.y - p0.y)
+    local m2y = tension * (p3.y - p1.y)
+    local y = (2*t3-3*t2+1)*p1.y + (t3-2*t2+t)*m1y + (-2*t3+3*t2)*p2.y + (t3-t2)*m2y
+    
+    return {x = x, y = y}
+  elseif isArray then
+    -- Array-like points
+    local result = {}
+    for i = 1, #p1 do
+      local m1 = tension * (p2[i] - p0[i])
+      local m2 = tension * (p3[i] - p1[i])
+      result[i] = (2*t3-3*t2+1)*p1[i] + (t3-2*t2+t)*m1 + (-2*t3+3*t2)*p2[i] + (t3-t2)*m2
+    end
+    return result
+  else
+    -- Scalar values
+    local m1 = tension * (p2 - p0)
+    local m2 = tension * (p3 - p1)
+    return (2*t3-3*t2+1)*p1 + (t3-2*t2+t)*m1 + (-2*t3+3*t2)*p2 + (t3-t2)*m2
+  end
+end
+
+-- Simple subdivision for fallback cases
+function Subdivide(points, steps)
+  local result = {}
+  for i = 1, #points - 1 do
+    local p0, p1 = points[i], points[i + 1]
+    for t = 0, (i < #points - 1) and steps or 0 do
+      local s = t / steps
+      local pt = lerp(p0, p1, s)
+      table.insert(result, pt)
+    end
+  end
+  
+  -- Make sure to add the last point
+  table.insert(result, copyPoint(points[#points]))
+  return result
+end
+
+-- Linear interpolation that handles different point formats
+function lerp(a, b, t)
+  if type(a) == "table" then
+    if a.x ~= nil and a.y ~= nil then
+      return {
+        x = a.x + (b.x - a.x) * t,
+        y = a.y + (b.y - a.y) * t
+      }
+    else
+      local result = {}
+      for i = 1, #a do
+        result[i] = a[i] + (b[i] - a[i]) * t
+      end
+      return result
+    end
+  else
+    return a + (b - a) * t
+  end
+end
+
+-- De Casteljau's algorithm for Bezier curve
+function BezierInterp(points, steps)
+  local result = {}
+  for i = 0, steps do
+    local t = i / steps
+    local tmp = {}
+    for j = 1, #points do tmp[j] = { points[j][1], points[j][2] } end
+    for k = #points - 1, 1, -1 do
+      for j = 1, k do
+        tmp[j][1] = (1 - t) * tmp[j][1] + t * tmp[j + 1][1]
+        tmp[j][2] = (1 - t) * tmp[j][2] + t * tmp[j + 1][2]
+      end
+    end
+    table.insert(result, tmp[1])
+  end
+  return result
+end
+
+-- Simple uniform B-spline using de Boor-like averaging
+function BSplineInterp(points, steps)
+  local result = {}
+  if #points < 3 then
+    return Subdivide(points, steps)
+  end
+
+  for i = 1, #points - 2 do
+    local p0, p1, p2 = points[i], points[i + 1], points[i + 2]
+    for t = 0, steps do
+      local s = t / steps
+      local a = lerp(p0, p1, s)
+      local b = lerp(p1, p2, s)
+      local pt = lerp(a, b, s)
+      table.insert(result, pt)
+    end
+  end
+  return result
+end
+
+-- Catmull-Rom spline interpolation
+function CatmullRomInterp(points, steps)
+  local result = {}
+  if #points < 4 then
+    return Subdivide(points, steps)
+  end
+
+  -- Create duplicate points at start and end if needed
+  local pts = {}
+  table.insert(pts, { points[1][1] - (points[2][1] - points[1][1]), points[1][2] - (points[2][2] - points[1][2]) })
+  for i = 1, #points do
+    pts[i + 1] = points[i]
+  end
+  table.insert(pts,
+    { points[#points][1] + (points[#points][1] - points[#points - 1][1]), points[#points][2] +
+    (points[#points][2] - points[#points - 1][2]) })
+  table.insert(pts,
+    { pts[#pts][1] + (pts[#pts][1] - pts[#pts - 1][1]), pts[#pts][2] + (pts[#pts][2] - pts[#pts - 1][2]) })
+
+  for i = 1, #points do
+    local p0, p1, p2, p3
+    p0, p1, p2, p3 = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
+
+    for j = 0, steps do
+      local t = j / steps
+      local t2 = t * t
+      local t3 = t2 * t
+
+      -- Catmull-Rom matrix coefficients
+      local h1 = 2 * t3 - 3 * t2 + 1
+      local h2 = -2 * t3 + 3 * t2
+      local h3 = t3 - 2 * t2 + t
+      local h4 = t3 - t2
+
+      local x = h1 * p1[1] + h2 * p2[1] + h3 * (p2[1] - p0[1]) + h4 * (p3[1] - p1[1])
+      local y = h1 * p1[2] + h2 * p2[2] + h3 * (p2[2] - p0[2]) + h4 * (p3[2] - p1[2])
+
+      if i > 1 or j > 0 then -- avoid duplicate points
+        table.insert(result, { x, y })
+      end
+    end
+  end
+
+  return result
+end
+
+-- Cardinal spline interpolation with tension parameter
+function CardinalInterp(points, steps, tension)
+  local result = {}
+  if #points < 3 then
+    return Subdivide(points, steps)
+  end
+
+  -- Create duplicate points at start and end if needed
+  local pts = {}
+  table.insert(pts, points[1])
+  for i = 1, #points do
+    pts[i + 1] = points[i]
+  end
+  table.insert(pts, points[#points])
+
+  for i = 1, #points - 1 do
+    local p0, p1, p2, p3
+    p0, p1, p2, p3 = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
+
+    for j = 0, steps do
+      local t = j / steps
+      local t2 = t * t
+      local t3 = t2 * t
+
+      local s = (1 - tension) / 2
+
+      -- Cardinal spline coefficients
+      local h1 = 2 * t3 - 3 * t2 + 1
+      local h2 = -2 * t3 + 3 * t2
+      local h3 = t3 - 2 * t2 + t
+      local h4 = t3 - t2
+
+      local x = h1 * p1[1] + h2 * p2[1] + h3 * s * (p2[1] - p0[1]) + h4 * s * (p3[1] - p1[1])
+      local y = h1 * p1[2] + h2 * p2[2] + h3 * s * (p2[2] - p0[2]) + h4 * s * (p3[2] - p1[2])
+
+      table.insert(result, { x, y })
+    end
+  end
+
+  return result
+end
+
+-- Cubic Hermite spline
+function CubicHermiteInterp(points, steps)
+  local result = {}
+  if #points < 2 then
+    return points
+  end
+
+  -- Calculate tangents (simple finite difference method)
+  local tangents = {}
+  for i = 1, #points do
+    local prev = i > 1 and points[i - 1] or points[i]
+    local next = i < #points and points[i + 1] or points[i]
+    tangents[i] = {
+      (next[1] - prev[1]) / 2,
+      (next[2] - prev[2]) / 2
+    }
+  end
+
+  for i = 1, #points - 1 do
+    local p0, p1 = points[i], points[i + 1]
+    local m0, m1 = tangents[i], tangents[i + 1]
+
+    for j = 0, steps do
+      local t = j / steps
+      local t2 = t * t
+      local t3 = t2 * t
+
+      -- Hermite basis functions
+      local h00 = 2 * t3 - 3 * t2 + 1
+      local h10 = t3 - 2 * t2 + t
+      local h01 = -2 * t3 + 3 * t2
+      local h11 = t3 - t2
+
+      local x = h00 * p0[1] + h10 * m0[1] + h01 * p1[1] + h11 * m1[1]
+      local y = h00 * p0[2] + h10 * m0[2] + h01 * p1[2] + h11 * m1[2]
+
+      table.insert(result, { x, y })
+    end
+  end
+
+  return result
+end
+
+-- Tension spline (parameterized smoothing)
+function TensionInterp(points, steps, tension)
+  local result = {}
+  if #points < 3 then
+    return Subdivide(points, steps)
+  end
+
+  for i = 1, #points - 2 do
+    local p0, p1, p2 = points[i], points[i + 1], points[i + 2]
+    for t = 0, steps do
+      local s = t / steps
+      -- Adjust interpolation based on tension
+      local a = lerp(p0, p1, s)
+      local b = lerp(p1, p2, s)
+      local weight = tension * s * (1 - s) + s
+      local pt = lerp(a, b, weight)
+      table.insert(result, pt)
+    end
+  end
+
+  return result
+end
+
+-- Step interpolation (creates stairstep pattern)
+function StepInterp(points, steps)
+  local result = {}
+  for i = 1, #points - 1 do
+    local p1, p2 = points[i], points[i + 1]
+    for j = 0, steps - 1 do
+      -- For first half of steps, use current point
+      if j < steps / 2 then
+        table.insert(result, { p1[1], p1[2] })
+      else
+        -- For second half, use next point
+        table.insert(result, { p2[1], p2[2] })
+      end
+    end
+  end
+  table.insert(result, points[#points])
+  return result
+end
+
+function NotifyChanged(inp, param, time)
+  if inp == InInterpMode then
+    local mode = param.Value
+    -- Only show tension slider for Cardinal and Tension modes
+    if mode == 4 or mode == 6 then -- Cardinal or Tension
+      InTension:SetAttrs({ IC_Visible = true, PC_Visible = true })
+    else
+      InTension:SetAttrs({ IC_Visible = false, PC_Visible = false })
+    end
+  end
+end
+
+function Process(req)
+  local subdiv = InSubdivide:GetValue(req).Value or 0
+  local interpMode = InInterpMode:GetValue(req).Value or 0
+  local tension = InTension:GetValue(req).Value or 0.5
+
+  local points = InScriptVal:GetValue(req):GetValue() or {}
+
+  -- Need at least 2 points to interpolate
+  if #points < 2 then
+    OutScriptVal:Set(req, ScriptValParam(points))
+    return
+  end
+
+  -- Select interpolation method based on mode
+  if interpMode == 1 then
+    points = BezierInterp(points, subdiv)
+  elseif interpMode == 2 then
+    -- points = BSplineInterp(points, subdiv)
+    -- points = GeneralizedBSpline(points, 3, subdiv)
+
+    points = CardinalSpline(points, tension, subdiv)
+  elseif interpMode == 3 then
+    points = CatmullRomInterp(points, subdiv)
+  elseif interpMode == 4 then
+    points = CardinalInterp(points, subdiv, tension)
+  elseif interpMode == 5 then
+    points = CubicHermiteInterp(points, subdiv)
+  elseif interpMode == 6 then
+    points = TensionInterp(points, subdiv, tension)
+  elseif interpMode == 7 then
+    points = StepInterp(points, subdiv)
+  else
+    points = Subdivide(points, subdiv)
+  end
+
+  OutScriptVal:Set(req, ScriptValParam(points))
+end

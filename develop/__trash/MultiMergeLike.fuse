@@ -1,0 +1,370 @@
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "MultiMergeLike"
+DATATYPE = "Image"
+
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType      = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls   = true,
+    REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name           = FUSE_NAME,
+    REGS_OpDescription  = "A CheckListControl InputControl.",
+    REGS_OpIconString   = FUSE_NAME
+})
+
+local LayerInputs = {}
+local LayerCount = 0
+function Create()
+    -- Main layer list control
+    InLayerList = self:AddInput("Layer List", "InLayerList", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 3,
+        CLC_Rows = 10,
+        CLC_TriState = false,
+        CLC_EnableEditing = false,
+        CLC_EnableReordering = true,
+        CLC_EnableMultiselect = true,
+        CLC_UpsideDown = false,
+        CLC_DisplayFlags = 0,
+        CLC_SelectedItem = 0,
+        -- INPS_DefaultText = {
+        --     { index = 1, name = "Layer 1", enabled = true, visible = true },
+        --     { index = 2, name = "Layer 2", enabled = true, visible = true },
+        --     { index = 3, name = "Layer 3", enabled = true, visible = true },
+        --     { index = 4, name = "Layer 4", enabled = true, visible = true },
+        --     { index = 5, name = "Layer 5", enabled = true, visible = true },
+        --     { index = 6, name = "Layer 6", enabled = true, visible = true },
+        --     { index = 7, name = "Layer 7", enabled = true, visible = true },
+        --     { index = 8, name = "Layer 8", enabled = true, visible = true },
+        -- },
+        INP_DoNotifyChanged = true,
+    })
+
+    -- Selection control (which item is selected)
+    InSelection = self:AddInput("Selection", "Selection", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 0, -- CHECKLISTCONTROL_SELECTION
+        INP_Default = 0,
+        INP_Integer = true,
+        IC_Visible = false, -- Hide this from UI
+        INP_DoNotifyChanged = true,
+    })
+
+    -- Add/Remove buttons
+    InAdd = self:AddInput("Add Layer", "AddLayer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ButtonControl",
+        -- IC_ControlGroup = 1,
+        IC_ControlID = 1, -- CHECKLISTCONTROL_ADD
+        INP_Default = 0,
+        INP_Integer = true,
+        INP_DoNotifyChanged = true,
+    })
+
+    InRemove = self:AddInput("Remove Layer", "RemoveLayer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ButtonControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 2, -- CHECKLISTCONTROL_REMOVE
+        INP_Default = 0,
+        INP_Integer = true,
+        INP_DoNotifyChanged = true,
+    })
+
+    -- Layer ordering
+    InOrdering = self:AddInput("Layer Ordering", "LayerOrdering", {
+        LINKID_DataType = "ScriptVal",
+        IC_ControlGroup = 1,
+        IC_ControlID = 3, -- CHECKLISTCONTROL_ORDERING
+        IC_Visible = false,
+        INPS_DefaultText = "{}",
+        INP_DoNotifyChanged = true,
+    })
+
+    -- Dynamic layer inputs (we'll create these as needed)
+    LayerInputs = {}
+    LayerCount = 0
+
+    -- Create initial layer inputs
+    for i = 1, 8 do
+        CreateLayerInput(i)
+    end
+
+    -- Output
+    OutImage = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+function CreateLayerInput(index)
+    local input = self:AddInput("Layer " .. index, "Layer" .. index, {
+        LINKID_DataType = "Image",
+        LINK_Main = index,
+        INP_Required = false,
+    })
+
+    -- Layer name input (associated with checklist)
+    local nameInput = self:AddInput("Layer " .. index .. " Name", "Layer" .. index .. "Name", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 2048 + (index - 1), -- CHECKLISTCONTROL_NAME_BASE + index
+        INPS_DefaultText = "Layer " .. index,
+        IC_Visible = true,                 -- This will be shown in the checklist
+    })
+
+    -- Layer enabled state
+    local enabledInput = self:AddInput("Layer " .. index .. " Enabled", "Layer" .. index .. "Enabled", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 1024 + (index - 1), -- CHECKLISTCONTROL_ENABLED_BASE + index
+        INP_Default = 1,
+        IC_Visible = true,                 -- This will be shown in the checklist
+    })
+
+    LayerInputs[index] = {
+        Input = input,
+        Name = nameInput,
+        Enabled = enabledInput
+    }
+end
+
+function Process(req)
+    local img = nil
+    local layerListRaw = InLayerList:GetValue(req).Value or {}
+    local layerList = layerListRaw
+    if type(layerListRaw) == "string" then
+        local f = load("return " .. layerListRaw)
+        if f then
+            local ok, tbl = pcall(f)
+            if ok and type(tbl) == "table" then
+                layerList = tbl
+            else
+                layerList = {}
+            end
+        else
+            layerList = {}
+        end
+    end
+
+    -- Debug: Print the current layer list
+    print("Current InLayerList contents:")
+    for i, layer in ipairs(layerList) do
+        print(string.format("  [%d] index=%s, name=%s, enabled=%s, visible=%s", i, tostring(layer.index),
+            tostring(layer.name), tostring(layer.enabled), tostring(layer.visible)))
+    end
+
+    -- Process layers in order
+    for i, layerInfo in ipairs(layerList) do
+        local layerIndex = layerInfo.index or i
+        local layerInput = LayerInputs[layerIndex]
+
+        if layerInput and layerInput.Input then
+            local layerImg = layerInput.Input:GetValue(req)
+            local isEnabled = layerInput.Enabled:GetValue(req).Value
+
+            if layerImg and isEnabled == 1 then
+                if img == nil then
+                    -- First layer becomes the base
+                    img = layerImg:Copy()
+                else
+                    -- Merge subsequent layers
+                    local merge = Merge({
+                        Foreground = layerImg,
+                        Background = img,
+                        ApplyMode = "Normal",
+                    }, req)
+                    img = merge
+                end
+            end
+        end
+    end
+
+    -- If no layers processed, create empty image
+    if img == nil then
+        img = Image({
+            IMG_Document = self.Comp,
+            IMG_Width = 1920,
+            IMG_Height = 1080,
+            IMG_XScale = XAspect,
+            IMG_YScale = YAspect,
+            IMAT_OriginalWidth = 1920,
+            IMAT_OriginalHeight = 1080,
+            IMG_Quality = not req:IsQuick(),
+            IMG_MotionBlurQuality = not req:IsNoMotionBlur(),
+        })
+
+        if img then
+            img:Clear()
+        end
+    end
+
+    OutImage:Set(req, img)
+end
+
+function simple_serialize(tbl)
+    local t = {}
+    table.insert(t, "{")
+    for i, v in ipairs(tbl) do
+        table.insert(t,
+            string.format("{index=%d,name=%q,enabled=%s,visible=%s}", v.index, v.name, tostring(v.enabled),
+                tostring(v.visible)))
+        if i < #tbl then table.insert(t, ",") end
+    end
+    table.insert(t, "}")
+    return table.concat(t)
+end
+
+function OnAddToFlow()
+    -- Initialize the layer list when added to flow
+    local layerData = {}
+    for i = 1, 8 do
+        table.insert(layerData, {
+            index = i,
+            name = "Layer " .. i,
+            enabled = true,
+            visible = true
+        })
+    end
+    -- dump(layerData)
+    -- Set initial layer list
+    --InLayerList:SetAttrs({ INPS_DefaultText = simple_serialize(layerList) })
+    -- InLayerList:SetSource(Text(simple_serialize(layerList)), time)
+end
+
+function NotifyChanged(inp, param, time)
+    -- Handle add/remove button presses
+    if inp == InAdd then
+        --AddLayer(time)
+
+
+
+        print("========================================>> AddLayer()")
+
+
+        LayerCount = LayerCount + 1
+        local newIndex = LayerCount + 8
+
+        if newIndex <= 32 then -- Limit to reasonable number
+            CreateLayerInput(newIndex)
+
+            -- Update layer list
+            local layerList = InLayerList:GetSource(time).Value or {}
+
+            print("========================================")
+
+            dump(layerList)
+
+            print("========================================")
+            table.insert(layerList, {
+                index = newIndex,
+                name = "Layer " .. newIndex,
+                enabled = true,
+                visible = true
+            })
+
+            InLayerList:SetSource(Text(simple_serialize(layerList)), time)
+        end
+    elseif inp == InRemove then
+        -- RemoveSelectedLayer(time)
+        local selection = InSelection:GetSource(time).Value
+        local layerList = InLayerList:GetSource(time).Value or {}
+
+        if selection >= 0 and selection < #layerList then
+            table.remove(layerList, selection + 1) -- Convert from 0-based to 1-based
+            InLayerList:SetSource(Text(simple_serialize(layerList)), time)
+        end
+    elseif inp == InLayerList then
+        -- Handle layer list changes
+        -- UpdateLayerList(time)
+
+
+        -- Get the current layer list from the control
+        local layerList = InLayerList:GetSource(time).Value or {}
+
+        -- Optionally, update LayerInputs and other controls to match the list
+        for i, layer in ipairs(layerList) do
+            local idx = layer.index or i
+            if not LayerInputs[idx] then
+                CreateLayerInput(idx)
+            end
+            -- Update name and enabled state if needed
+            if LayerInputs[idx] then
+                LayerInputs[idx].Name:SetAttrs({ INPS_DefaultText = layer.name or ("Layer " .. idx) })
+                LayerInputs[idx].Enabled:SetAttrs({ INP_Default = layer.enabled and 1 or 0 })
+            end
+        end
+    end
+end
+
+function AddLayer(time)
+    print("========================================>> AddLayer()")
+
+
+    LayerCount = LayerCount + 1
+    local newIndex = LayerCount + 8
+
+    if newIndex <= 32 then -- Limit to reasonable number
+        CreateLayerInput(newIndex)
+
+        -- Update layer list
+        local layerList = InLayerList:GetValue(time).Value or {}
+
+        print("========================================")
+
+        dump(layerList)
+
+        print("========================================")
+        table.insert(layerList, {
+            index = newIndex,
+            name = "Layer " .. newIndex,
+            enabled = true,
+            visible = true
+        })
+
+        InLayerList:SetSource(Text(simple_serialize(layerList)), time)
+    end
+end
+
+function RemoveSelectedLayer(time)
+    local selection = InSelection:GetValue(time).Value
+    local layerList = InLayerList:GetValue(time).Value or {}
+
+    if selection >= 0 and selection < #layerList then
+        table.remove(layerList, selection + 1) -- Convert from 0-based to 1-based
+        InLayerList:SetSource(Text(dump(layerList)), time)
+    end
+end
+
+function UpdateLayerList(time)
+    -- Get the current layer list from the control
+    local layerList = InLayerList:GetValue(time).Value or {}
+
+    -- Optionally, update LayerInputs and other controls to match the list
+    for i, layer in ipairs(layerList) do
+        local idx = layer.index or i
+        if not LayerInputs[idx] then
+            CreateLayerInput(idx)
+        end
+        -- Update name and enabled state if needed
+        if LayerInputs[idx] then
+            LayerInputs[idx].Name:SetAttrs({ INPS_DefaultText = layer.name or ("Layer " .. idx) })
+            LayerInputs[idx].Enabled:SetAttrs({ INP_Default = layer.enabled and 1 or 0 })
+        end
+    end
+
+    -- Optionally, remove LayerInputs that are no longer in the list
+    -- (not implemented here, but can be added if needed)
+end

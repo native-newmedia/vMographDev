@@ -1,0 +1,686 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+local arrayutils = self and require("varrayutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "CircuitBoardPattern"
+DATATYPE = "Text"
+MAX_INPUTS = 24
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+  REGID_DataType      = DATATYPE,
+  REGID_InputDataType = DATATYPE,
+  REG_NoCommonCtrls   = true,
+  REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_Name           = FUSE_NAME,
+  REGS_OpDescription  = "Generates abstract circuit board lines and components",
+  REGS_OpIconString   = FUSE_NAME,
+  REGS_IconID         = "Icons.Tools.Icons.TextPlus",
+  --REG_TimeVariant     = true, -- required to disable caching of the current time parameter
+  -- REGB_Temporal       = true, -- ensures reliability in Resolve 15
+})
+-- ============================================================================
+function Create()
+  InSeed = self:AddInput("Random Seed", "Seed", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Integer = true,
+    INP_Default = 42,
+    INP_MinAllowed = 0,
+    INP_MaxAllowed = 9999
+  })
+  InAngleMode = self:AddInput("Line Angle Mode", "AngleMode", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ComboControl",
+    INP_Default = 0,
+    INP_Integer = true,
+    { CCS_AddString = "Orthogonal" },
+    { CCS_AddString = "45 Degree" },
+    { CCS_AddString = "Both" },
+  })
+
+
+
+  InGridRows = self:AddInput("Grid Rows", "GridRows", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Integer = true,
+    INP_Default = 5,
+    INP_MinAllowed = 1,
+    INP_MaxAllowed = 100
+  })
+  InGridCols = self:AddInput("Grid Cols", "GridCols", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Integer = true,
+    INP_Default = 5,
+    INP_MinAllowed = 1,
+    INP_MaxAllowed = 100
+  })
+
+  InCenter = self:AddInput("Center", "Center", {
+    LINKID_DataType = "Point",
+    INPID_InputControl = "OffsetControl",
+    INPID_PreviewControl = "CrosshairControl",
+  })
+  InThickness = self:AddInput("Thickness", "Thickness", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Default = 0.01,
+    INP_MinAllowed = 0.0001,
+    INP_MaxAllowed = 0.1
+  })
+  InRotation = self:AddInput("Rotation", "Rotation", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_MinScale       = 0.0,
+    INP_MaxScale       = 100.0,
+    INP_Default        = 0.0,
+  })
+  InScale = self:AddInput("Scale", "Scale", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Default = 0.1,
+    INP_MinAllowed = 0.01,
+    INP_MaxAllowed = 1.0
+  })
+  self:BeginControlNest("Node Settings", "nodesettings", false, {})
+  InShowNodes = self:AddInput("Show Nodes", "showNodes", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "CheckboxControl",
+    INP_Default        = 0,
+  })
+  InShowNodesOutline = self:AddInput("Show Nodes Outline ", "showNodesOutline ", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "CheckboxControl",
+    INP_Default        = 0,
+  })
+  InInputSource = self:AddInput("Input Source", "InputSource", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "MultiButtonControl",
+    INP_Default = 0,
+    { MBTNC_AddButton = "Default", MBTNCD_ButtonWidth = 1 / 3, },
+    { MBTNC_AddButton = "Custom",  MBTNCD_ButtonWidth = 1 / 3, },
+    { MBTNC_AddButton = "Random",  MBTNCD_ButtonWidth = 1 / 3, },
+    INP_Integer = true,
+    INP_DoNotifyChanged = true,
+  })
+  InNodesSelect = self:AddInput("Nodes Shape", "NodesShape", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 1.0,
+    INP_MinAllowed = 1,
+    INP_MaxAllowed = 3,
+    INP_MaxScale = 3,
+    INP_Integer = true,
+  })
+  InNodesSize = self:AddInput("Nodes Size", "NodesSize", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Default = 1.0,
+    INP_MinAllowed = 0.01,
+    INP_MaxAllowed = 10.0,
+
+  })
+  InNodesThickness = self:AddInput("Nodes Thickness", "NodesThickness", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Default = 0.01,
+    INP_MinAllowed = 0.0001,
+    INP_MaxAllowed = 0.1
+  })
+  InNodesCount = self:AddInput("Nodes Count", "nodesCount", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Integer        = true,
+    INP_Default        = 10,
+    INP_MinScale       = 1,
+    INP_MaxScale       = 50,
+    INP_MinAllowed     = 1,
+  })
+  InR_Nodes = self:AddInput("Red", "Red_node", {
+    ICS_Name           = "Color",
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.25,
+    INP_MaxScale       = 1.0,
+    CLRC_ShowWheel     = false,
+    IC_ControlGroup    = 3,
+    IC_ControlID       = 0,
+  })
+  InG_Nodes = self:AddInput("Green", "Green_node", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.57,
+    IC_ControlGroup    = 3,
+    IC_ControlID       = 1,
+  })
+  InB_Nodes = self:AddInput("Blue", "Blue_node", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.96,
+    IC_ControlGroup    = 3,
+    IC_ControlID       = 2,
+  })
+  self:EndControlNest()
+
+  self:BeginControlNest("Style Settings", "stylesettings", false, {})
+  InFilter = self:AddInput("Filter", "Filter", {
+      LINKID_DataType    = "Number",
+      INPID_InputControl = "MultiButtonControl",
+      INP_Default        = 3.0,
+      {
+          MBTNC_AddButton    = "Box",
+          MBTNCD_ButtonWidth = 0.25,
+      },
+      {
+          MBTNC_AddButton    = "Bartlett",
+          MBTNCD_ButtonWidth = 0.25,
+      },
+      {
+          MBTNC_AddButton    = "Multi-box",
+          MBTNCD_ButtonWidth = 0.25,
+      },
+      {
+          MBTNC_AddButton    = "Gaussian",
+          MBTNCD_ButtonWidth = 0.25,
+      },
+      IC_Visible = false,
+      PC_Visible = false
+  })
+  InSoftEdge = self:AddInput("Soft Edge", "SoftEdge", {
+      LINKID_DataType    = "Number",
+      INPID_InputControl = "SliderControl",
+      INP_MinAllowed     = 0,
+      INP_MaxScale       = 50,
+      INP_Default        = 0,
+      IC_Visible         = false,
+      PC_Visible         = false
+  })
+  InLineType = self:AddInput("Line Type", "LineType", {
+      LINKID_DataType    = "Number",
+      INPID_InputControl = "MultiButtonControl",
+      INP_Default        = 0.0,
+      MBTNC_ShowName     = false,
+      {
+          MBTNC_AddButton    = "Solid",
+          MBTNCD_ButtonWidth = 0.33,
+      },
+      {
+          MBTNC_AddButton    = "Dash",
+          MBTNCD_ButtonWidth = 0.34,
+      },
+      {
+          MBTNC_AddButton    = "Dot",
+          MBTNCD_ButtonWidth = 0.33,
+      },
+      {
+          MBTNC_AddButton    = "Dash Dot",
+          MBTNCD_ButtonWidth = 0.5,
+      },
+      {
+          MBTNC_AddButton    = "Dash Dot Dot",
+          MBTNCD_ButtonWidth = 0.5,
+      },
+  })
+  InJoinType = self:AddInput("Join Type", "JoinType", {
+      LINKID_DataType    = "Number",
+      INPID_InputControl = "MultiButtonControl",
+      INP_Default        = 2.0,
+      MBTNC_ShowName     = false,
+      {
+          MBTNC_AddButton    = "Bevel",
+          MBTNCD_ButtonWidth = 0.3333,
+      },
+      {
+          MBTNC_AddButton    = "Round",
+          MBTNCD_ButtonWidth = 0.3333,
+      },
+  })
+
+  self:EndControlNest()
+  self:BeginControlNest("Pulse Settings", "pulsesettings", false, {})
+  InShowPulse = self:AddInput("Show Pulse", "showPulse", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "CheckboxControl",
+    INP_Default        = 0,
+  })
+  InPulseThickness = self:AddInput("Pulse Thickness", "PulseThickness", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Default = 0.01,
+    INP_MinAllowed = 0.0001,
+    INP_MaxAllowed = 0.1
+  })
+
+  InPulseSpeed = self:AddInput("Pulse Speed", "PulseSpeed", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Default = 0.0,
+    INP_MinAllowed = 0.0,
+    INP_MaxAllowed = 1.0
+  })
+
+  InPulseLength = self:AddInput("Pulse Length", "PulseLength", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.1,
+    INP_MinAllowed = 0.01,
+    INP_MaxAllowed = 1.0
+  })
+
+  
+  InR = self:AddInput("Red", "Red", {
+    ICS_Name           = "Color",
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.0,
+    INP_MaxScale       = 1.0,
+    CLRC_ShowWheel     = false,
+    IC_ControlGroup    = 2,
+    IC_ControlID       = 0,
+  })
+  InG = self:AddInput("Green", "Green", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.0,
+    IC_ControlGroup    = 2,
+    IC_ControlID       = 1,
+  })
+  InB = self:AddInput("Blue", "Blue", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.75,
+    IC_ControlGroup    = 2,
+    IC_ControlID       = 2,
+  })
+
+self:EndControlNest()
+  
+  InImage = self:AddInput("Input", "Input", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+  InShape = self:AddInput("JSON Custom Shape", "JSONCustomShape", {
+    LINKID_DataType = "ScriptVal",
+    INPID_InputControl = "ImageControl",
+    LINK_Main = 2,
+  })
+
+  OutShape = self:AddOutput("Shape", "Shape", {
+    LINKID_DataType = "Shape",
+    LINK_Main = 3
+  })
+
+  OutImage = self:AddOutput("Output", "Output", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1
+  })
+  OutScriptVal = self:AddOutput("ScriptVal", "ScriptVal", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 2
+  })
+end
+
+function convertY(y, ref_img)
+  return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+function Process(req)
+  local seed = InSeed:GetValue(req).Value
+  math.randomseed(seed)
+
+  local array_str_shape = InShape:GetValue(req):GetValue() or {}
+
+  local tbl_Shape = {}
+  if array_str_shape and array_str_shape ~= "" then
+    local inp_shape_tbl = array_str_shape
+    if inp_shape_tbl ~= nil and type(inp_shape_tbl) == "table" then
+      tbl_Shape = inp_shape_tbl
+    end
+  end
+
+
+  local spacing = InScale:GetValue(req).Value
+  local gridRows = InGridRows:GetValue(req).Value
+  local gridCols = InGridCols:GetValue(req).Value
+
+  local cols, rows = math.floor(gridCols), math.floor(gridRows)
+
+  local center = InCenter:GetValue(req)
+  local global_x = center.X
+  local global_y = center.Y
+
+  local angleMode = InAngleMode:GetValue(req).Value -- 0 = ortho, 1 = diag, 2 = both
+
+  local nodesCount = InNodesCount:GetValue(req).Value
+  local pulsethickness = InPulseThickness:GetValue(req).Value
+  local nodesSelect = InNodesSelect:GetValue(req).Value
+
+
+  local linetype = math.floor(InLineType:GetValue(req).Value + 0.5) + 1
+  local jointype = math.floor(InJoinType:GetValue(req).Value + 0.5) + 1
+
+  local thickness = InThickness:GetValue(req).Value
+  local rotation = InRotation:GetValue(req).Value
+  local r = InR:GetValue(req).Value
+  local g = InG:GetValue(req).Value
+  local b = InB:GetValue(req).Value
+  local r_n = InR_Nodes:GetValue(req).Value
+  local g_n = InG_Nodes:GetValue(req).Value
+  local b_n = InB_Nodes:GetValue(req).Value
+
+  local img = InImage:GetValue(req)
+  local out = img:CopyOf()
+  --img:Clear()
+
+  local ic = ImageChannel(out, 8)
+  local fs = FillStyle()
+  local cs = ChannelStyle()
+  ic:SetStyleFill(fs)
+  local mat = Matrix4()
+  local matNodes = Matrix4()
+  local shape = Shape()
+  local shapeNodes = Shape()
+  local source = InInputSource:GetValue(req).Value
+
+
+  local points = {}
+  local pointMap = {}
+  local animatedTraces = {}
+
+
+  local outline_line_type = {
+      "OLT_Solid",
+      "OLT_Dash",
+      "OLT_Dot",
+      "OLT_DashDot",
+      "OLT_DashDotDot",
+  }
+  local blurfilters       = {
+      "BT_Box",
+      "BT_Bartless",
+      "BT_MultiBox",
+      "BT_Gaussian",
+  }
+  local outline_join_type = {
+      "OJT_Bevel",
+      "OJT_Round",
+  }
+  local outline_cap_type  = {
+      "OCT_Butt",
+      "OCT_Square",
+      "OCT_Round",
+  }
+
+
+  ---[[
+  for y = 0, rows - 1 do
+    for x = 0, cols - 1 do
+      local px, py
+      if math.random() > 0.2 then -- skip ~20% of the grid for irregularity
+        px = x * spacing
+        py = y * spacing
+        local pt = { x = px, y = py }
+        table.insert(points, pt)
+        pointMap[px .. "," .. py] = pt
+      end
+    end
+  end
+
+  local function findNeighbor(p1, dx, dy)
+    for _, p2 in ipairs(points) do
+      if math.abs(p2.x - (p1.x + dx)) < 0.001 and math.abs(p2.y - (p1.y + dy)) < 0.001 then
+        return p2
+      end
+    end
+    return nil
+  end
+
+  local function findNeighbor_B(p1, dx, dy)
+    local tx, ty = p1.x + dx, p1.y + dy
+    return pointMap[tx .. "," .. ty]
+  end
+
+  local function drawConnection(p1, dx, dy)
+    local p2 = findNeighbor(p1, dx, dy)
+    if p2 then
+      shape:MoveTo(Vector2(p1.x, p1.y))
+      shape:LineTo(Vector2(p2.x, p2.y))
+    end
+  end
+
+  -- Collect all valid connections for animation
+  for _, pt in ipairs(points) do
+    -- For all angle modes, collect valid connections
+    if angleMode == 0 or angleMode == 2 then
+      -- Orthogonal connections (right and down)
+      local rightNeighbor = findNeighbor_B(pt, spacing, 0)
+      if rightNeighbor then
+        table.insert(animatedTraces, { start = pt, stop = rightNeighbor })
+      end
+
+      local downNeighbor = findNeighbor_B(pt, 0, spacing)
+      if downNeighbor then
+        table.insert(animatedTraces, { start = pt, stop = downNeighbor })
+      end
+    end
+
+    if angleMode == 1 or angleMode == 2 then
+      -- Diagonal connections (down-right and down-left)
+      local downRightNeighbor = findNeighbor_B(pt, spacing, spacing)
+      if downRightNeighbor then
+        table.insert(animatedTraces, { start = pt, stop = downRightNeighbor })
+      end
+
+      local downLeftNeighbor = findNeighbor_B(pt, -spacing, spacing)
+      if downLeftNeighbor then
+        table.insert(animatedTraces, { start = pt, stop = downLeftNeighbor })
+      end
+    end
+  end
+
+  -- Draw lines between points
+  for _, pt in ipairs(points) do
+    if angleMode == 0 or angleMode == 2 then
+      drawConnection(pt, spacing, 0) -- right
+      drawConnection(pt, 0, spacing) -- down
+    end
+    if angleMode == 1 or angleMode == 2 then
+      drawConnection(pt, spacing, spacing)  -- down-right
+      drawConnection(pt, -spacing, spacing) -- down-left
+    end
+  end
+  shape:Close()
+  --shape = shape:OutlineOfShape(thickness, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+
+  shape = shape:OutlineOfShape(thickness, outline_line_type[linetype], outline_join_type[jointype],
+            "OCT_Square", (req:IsQuick() and 8 or 16))
+
+
+  -- Component at nodes (optional)
+  if InShowNodes:GetValue(req).Value > 0 then
+    local nodesSize = InNodesSize:GetValue(req).Value
+    local nodesThickness = InNodesThickness:GetValue(req).Value
+
+    -- Calculate how many nodes to show based on nodesCount
+    local totalPoints = #points
+    local nodesToShow = totalPoints
+
+    if nodesCount > 0 and nodesCount < totalPoints then
+      nodesToShow = nodesCount
+    end
+
+    -- Create a table to track which points will have nodes
+    local showNodeAt = {}
+
+    -- If we're showing all nodes, mark all as visible
+    if nodesToShow == totalPoints then
+      for i = 1, totalPoints do
+        showNodeAt[i] = true
+      end
+    else
+      -- Randomly select which points will have nodes
+      local remainingNodes = nodesToShow
+      while remainingNodes > 0 do
+        local idx = math.random(1, totalPoints)
+        if not showNodeAt[idx] then
+          showNodeAt[idx] = true
+          remainingNodes = remainingNodes - 1
+        end
+      end
+    end
+
+    -- Draw nodes at selected points
+    for i, pt in ipairs(points) do
+      if showNodeAt[i] then
+        -- Apply scaling to node shapes
+        matNodes:Identity()
+        matNodes:Move(0, 0, 0)
+
+        matNodes:Scale(nodesSize, nodesSize, 1)
+        matNodes:Move(pt.x, pt.y, 0)
+
+        local s = spacing
+        local rs = math.random()
+        local nodeShape = Shape()
+        -- Determine the shape of the node based on the input source
+        if source == 0 then
+          -- Default: Use a simple rectangle shape
+          nodesSelect = math.max(1, math.min(3, nodesSelect)) -- Ensure nodesSelect is between 1 and 3
+          if nodesSelect == 1 then
+            nodeShape:AddRectangle(-s * 0.1, s * 0.1, -s * 0.1, s * 0.1, 0.0)
+          elseif nodesSelect == 2 then
+            nodeShape:AddRectangle(-s * 0.08, s * 0.08, -s * 0.08, s * 0.08, s * 0.08)
+          elseif nodesSelect == 3 then
+            nodeShape:MoveTo(Vector2(-s * 0.05, 0))
+            nodeShape:LineTo(Vector2(s * 0.05, 0))
+            nodeShape:MoveTo(Vector2(0, -s * 0.05))
+            nodeShape:LineTo(Vector2(0, s * 0.05))
+          end
+          -- Default case: if nodesSelect is not 1, 2, or 3, use a rectangle
+          -- nodeShape:AddRectangle(-s * 0.1, s * 0.1, -s * 0.1, s * 0.1, 0.0)
+        elseif source == 1 then
+          -- Custom: Use the provided custom shape from tbl_Shape
+          if tbl_Shape == nil or #tbl_Shape == 0 then -- Check if tbl_Shape is nil or empty
+            nodeShape:AddRectangle(-s * 0.1, s * 0.1, -s * 0.1, s * 0.1, 0.0)
+          else
+            -- Create a custom shape from the provided tbl_Shape
+            nodeShape:AddShape(tbl_Shape[1][1])
+          end
+        elseif source == 2 then
+          -- Random: Use a random shape from tbl_Shape if available, otherwise default to rectangle
+          if rs < 0.33 then
+            if tbl_Shape == nil or #tbl_Shape == 0 then
+              nodeShape:AddRectangle(-s * 0.1, s * 0.1, -s * 0.1, s * 0.1, 0.0)
+            else
+              nodeShape:AddShape(tbl_Shape[1][1])
+            end
+          elseif rs < 0.66 then
+            nodeShape:AddRectangle(-s * 0.08, s * 0.08, -s * 0.08, s * 0.08, s * 0.08)
+          else
+            nodeShape:MoveTo(Vector2(-s * 0.05, 0))
+            nodeShape:LineTo(Vector2(s * 0.05, 0))
+            nodeShape:MoveTo(Vector2(0, -s * 0.05))
+            nodeShape:LineTo(Vector2(0, s * 0.05))
+          end
+        end
+
+        shapeNodes:AddShape(nodeShape:TransformOfShape(matNodes))
+      end
+    end
+
+    if InShowNodesOutline:GetValue(req).Value > 0 then
+      shapeNodes = shapeNodes:OutlineOfShape(nodesThickness, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+    end
+    shapeNodes:Close()
+  end
+
+  -- =========================================================================
+  --  -- Add the pulse shape to the main shape
+
+  local t = req.Time * InPulseSpeed:GetValue(req).Value % 1.0
+  local pulseLen = InPulseLength:GetValue(req).Value
+  local pulseShape = Shape()
+
+  if InShowPulse:GetValue(req).Value > 0 then
+    for _, trace in ipairs(animatedTraces) do
+      local p1 = trace.start
+      local p2 = trace.stop
+      local function lerp(a, b, f) return a + (b - a) * f end
+      local segStart = t
+      local segEnd = (t + pulseLen) % 1.0
+      local function drawSegment(f1, f2)
+        local x1 = lerp(p1.x, p2.x, f1)
+        local y1 = lerp(p1.y, p2.y, f1)
+        local x2 = lerp(p1.x, p2.x, f2)
+        local y2 = lerp(p1.y, p2.y, f2)
+        pulseShape:MoveTo(Vector2(x1, y1))
+        pulseShape:LineTo(Vector2(x2, y2))
+      end
+      if segEnd > segStart then
+        drawSegment(segStart, segEnd)
+      else
+        drawSegment(segStart, 1.0)
+        drawSegment(0.0, segEnd)
+      end
+    end
+    pulseShape:Close()
+
+    pulseShape = pulseShape:OutlineOfShape(pulsethickness, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+  end
+
+  -- =========================================================================
+
+  -- Transform matrix
+  mat:Identity()
+  mat:RotZ(rotation)
+  mat:Move(global_x, convertY(global_y, img), 0)
+
+  --Render the main shape
+  -- =====================================================================
+  --Add the shape to the main shape
+  cs.Color = Pixel { R = r, G = g, B = b, A = 1 }
+  ic:SetStyleFill(fs)
+  ic:ShapeFill(shape:TransformOfShape(mat))
+  ic:PutToImage("CM_Merge", cs)
+  -- =====================================================================
+  --Add the nodes to the main shape
+  cs.Color = Pixel { R = r_n, G = g_n, B = b_n, A = 1 }
+  ic:SetStyleFill(fs)
+  ic:ShapeFill(shapeNodes:TransformOfShape(mat))
+  ic:PutToImage("CM_Merge", cs)
+  -- =====================================================================
+
+  --Add the pulse animation to the main shape
+  cs.Color = Pixel { R = r_n, G = g_n, B = b_n, A = 1 }
+  ic:SetStyleFill(fs)
+  ic:ShapeFill(pulseShape:TransformOfShape(mat))
+  ic:PutToImage("CM_Merge", cs)
+  -- =====================================================================
+
+  local data = {
+    shape = shape,
+    points = points,
+    cols = cols,
+    rows = rows,
+    spacing = spacing,
+    global_x = global_x,
+    global_y = global_y,
+    center = center,
+    thickness = thickness,
+    rotation = rotation,
+    r = r,
+    g = g,
+    b = b
+  }
+
+  OutShape:Set(req, shape)
+  OutImage:Set(req, out)
+  OutScriptVal:Set(req, ScriptValParam(data))
+end

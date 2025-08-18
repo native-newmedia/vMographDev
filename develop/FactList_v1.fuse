@@ -1,0 +1,3018 @@
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "FactList_v1"
+DATATYPE = "ScriptVal"
+MAX_INPUTS = 64
+version = "version 1.0"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name          = FUSE_NAME,
+    REGS_OpDescription = "Render shapes from a ScriptVal based Lua table.",
+    REGS_OpIconString  = FUSE_NAME,
+    -- Should the current time setting be cached?
+    REG_TimeVariant    = true,
+    REG_Unpredictable  = true,
+    -- Icon shown in the "Select Tool" dialog and the "Tile Picture"
+    REGS_IconID        = "Icons.Tools.Icons.RunCommand",
+    REG_Version        = 000001,
+})
+function Create()
+    -- [[ Creates the user interface. ]]
+    InWhich = self:AddInput("Which", "Which", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = MAX_INPUTS,
+        INP_MaxScale = 1,
+        INP_Integer = true,
+        IC_Steps = 1.0,
+        IC_Visible = false
+    })
+    InLabel1 = self:AddInput("", 'Label1', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_ControlPage = -1,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    -- ============================================================================
+    InObjectType = self:AddInput("Section", "section", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default        = 0.0,
+        IC_ControlPage     = -1,
+        MBTNC_ShowName     = false,
+        {
+            MBTNC_AddButton    = "Full Team Layout",
+            MBTNCD_ButtonWidth = 0.33,
+        },
+        {
+            MBTNC_AddButton    = "Score List Card A",
+            MBTNCD_ButtonWidth = 0.34,
+        },
+         {
+            MBTNC_AddButton    = "Score List Card B",
+            MBTNCD_ButtonWidth = 0.34,
+        },
+        {
+            MBTNC_AddButton    = "Fact List Card A",
+            MBTNCD_ButtonWidth = 0.33,
+        },
+        {
+            MBTNC_AddButton    = "Fact List Card B",
+            MBTNCD_ButtonWidth = 0.5,
+        },
+    })
+    -- ============================================================================
+    self:BeginControlNest("Hightlight Range Selection", "RangeSelection", true, { LBLC_PickButton = false })
+    InFrom = self:AddInput("From", "From", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "SliderControl",
+        TEC_Lines          = 1,
+        INP_MinScale       = 0,
+        INP_MaxScale       = 10,
+        INP_MinAllowed     = 0,
+        INP_MaxAllowed     = 1e+38,
+        INP_Integer        = true,
+        INP_Default        = 0,
+    })
+    InTo = self:AddInput("To", "To", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "SliderControl",
+        TEC_Lines          = 1,
+        INP_MinScale       = 0,
+        INP_MaxScale       = 10,
+        INP_MinAllowed     = 0,
+        INP_MaxAllowed     = 1e+38,
+        INP_Integer        = true,
+        INP_Default        = 0,
+    })
+    InStep = self:AddInput("Step", "Step", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        TEC_Lines = 1,
+        INP_MinScale = -100,
+        INP_MaxScale = 100,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+        INP_Integer = true,
+        INP_Default = 1,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    self:EndControlNest()
+    self:BeginControlNest("Font Settings", "FontSettings", false, { LBLC_PickButton = false })
+    InLabel2 = self:AddInput("", 'Label2', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    InFont2 = self:AddInput("Font", "Font2", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 2,
+        IC_ControlID = 0,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontStyle2 = self:AddInput("Font Style", "fontStyle2", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 2,
+        IC_ControlID = 1,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontSize2 = self:AddInput("Font Size", "fontSize2", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.025,
+    })
+    InCharSpacing2 = self:AddInput("Character Spacing", "CharacterSpacing2", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 5.0,
+        INP_Default = 0.0,
+    })
+    -- -----------------------
+    InLabel3 = self:AddInput("", 'Label3', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    InFont3 = self:AddInput("Font", "Font3", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 3,
+        IC_ControlID = 0,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontStyle3 = self:AddInput("Font Style", "fontStyle3", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 3,
+        IC_ControlID = 1,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontSize3 = self:AddInput("Font Size", "fontSize3", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.039,
+    })
+    InCharSpacing3 = self:AddInput("Character Spacing", "CharacterSpacing3", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 5.0,
+        INP_Default = 0.0,
+    })
+    InLabel4 = self:AddInput("", 'Label4', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    InFont4 = self:AddInput("Font", "Font4", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 4,
+        IC_ControlID = 0,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontStyle4 = self:AddInput("Font Style", "fontStyle4", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 4,
+        IC_ControlID = 1,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontSize4 = self:AddInput("Font Size", "fontSize4", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.036,
+    })
+    InCharSpacing4 = self:AddInput("Character Spacing", "CharacterSpacing4", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 5.0,
+        INP_Default = 0.0,
+    })
+
+    InLabel5 = self:AddInput("", 'Label5', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    InFont5 = self:AddInput("Font", "Font5", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 5,
+        IC_ControlID = 0,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontStyle5 = self:AddInput("Font Style", "fontStyle5", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 5,
+        IC_ControlID = 1,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontSize5a = self:AddInput("Player Font Size", "fontSize5a", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.025,
+    })
+    InFontSize5b = self:AddInput("Sub Player Font Size", "fontSize5b", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.018,
+    })
+    InCharSpacing5 = self:AddInput("Character Spacing", "CharacterSpacing5", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 5.0,
+        INP_Default = 0.0,
+    })
+    InLabel6 = self:AddInput("", 'Label6', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    InFont6 = self:AddInput("Font", "Font6", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 6,
+        IC_ControlID = 0,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontStyle6 = self:AddInput("Font Style", "fontStyle6", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 6,
+        IC_ControlID = 1,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontSize6 = self:AddInput("Font Size", "fontSize6", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.06,
+    })
+    InCharSpacing6 = self:AddInput("Character Spacing", "CharacterSpacing6", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 5.0,
+        INP_Default = 1.8,
+    })
+    InLabel7 = self:AddInput("", 'Label7', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    InFont7 = self:AddInput("Font", "Font7", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 7,
+        IC_ControlID = 0,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontStyle7 = self:AddInput("Font Style", "fontStyle7", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 7,
+        IC_ControlID = 1,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontSize7 = self:AddInput("Font Size", "fontSize7", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.095,
+    })
+    InCharSpacing7 = self:AddInput("Character Spacing", "CharacterSpacing7", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 5.0,
+        INP_Default = 0.850,
+    })
+    InLabel8 = self:AddInput("", 'Label8', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    InFont8 = self:AddInput("Font", "Font8", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 8,
+        IC_ControlID = 0,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontStyle8 = self:AddInput("Font Style", "fontStyle8", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 8,
+        IC_ControlID = 1,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+    InFontSize8 = self:AddInput("Font Size", "fontSize8", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.047,
+    })
+    InCharSpacing8 = self:AddInput("Character Spacing", "CharacterSpacing8", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 5.0,
+        INP_Default = 1.650,
+    })
+    self:EndControlNest()
+    InShowInput = self:AddInput("Show Input", "ShowInput", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true
+    })
+    InImageList = self:AddInput("Image List", "Image List", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 4,
+        INP_Required = false,
+    })
+    InScriptVal1 = self:AddInput("InScriptVal1", "InScriptVal1", {
+        LINKID_DataType = DATATYPE,
+        INP_Required = false,
+        INP_Priority = 1,
+        LINK_Main = 2,
+    })
+    InScriptVal2 = self:AddInput("ScriptVal2", "ScriptVal2", {
+        INPID_InputControl = "ImageControl",
+        LINKID_DataType = DATATYPE,
+        INP_Required = false,
+        LINK_Main = 3,
+    })
+    InLabel = self:AddInput("Fact List " .. version, "version", {
+        LINKID_DataType    = "Text",
+        INPID_InputControl = "LabelControl",
+        INP_External       = false,
+        INP_Passive        = true,
+    })
+    self:AddControlPage("⬅ Images")
+    InEmptySpace1 = self:AddInput('    ', 'EmptySpace1', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        ICD_Width = 0.3,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    InFile = self:AddInput("Image Folder", "imagefolder", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FileControl",
+        FC_PathBrowse = true,
+    })
+    InExpandPathMaps = self:AddInput("Expand PathMaps", "ExpandPathMaps", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 0.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true
+    })
+    InTimeMode = self:AddInput("Time Mode", "TimeMode", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ComboControl",
+        INP_Default = 3,
+        INP_Integer = true,
+        ICD_Width = 1,
+        { CCS_AddString = "Static Frame" },
+        { CCS_AddString = "Current Frame" },
+        { CCS_AddString = "Request Time" },
+        { CCS_AddString = "Time" },
+        CC_LabelPosition = "Vertical",
+        INP_DoNotifyChanged = true,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    InTime = self:AddInput("Time", "Time", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 100.0,
+        INP_Default = 3.0,
+        LINK_Main = 4,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    self:AddControlPage("⬅ Shapes")
+    InMoveNumber = self:AddInput("MoveNumber", "MoveNumber", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -5.0,
+        INP_MaxScale = 5.0,
+        INP_Default = 0.0,
+    })
+    InBarNameWidth = self:AddInput("Bar Name Width", "NameWidth", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.5,
+        INP_Default = 0.18,
+    })
+    InBarHeight = self:AddInput("BarHeight", "BarHeight", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.018,
+    })
+    InBarSpacer = self:AddInput("Bar Spacer", "BarSpacer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.044,
+    })
+    InBarText_X_Offset = self:AddInput("Bar Text X Offset", "BarTextXOffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -1.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 0.03,
+    })
+    InBarText_Y_Offset = self:AddInput("Bar Text Y Offset", "BarTextYOffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -1.0,
+        INP_MaxScale = 1.0,
+        INP_Default = -0.006,
+    })
+    InBarScoreWidth = self:AddInput("Bar Score Width", "ScoreWidth", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.5,
+        INP_Default = 0.02,
+    })
+    InBarScore_X_Offset = self:AddInput("Bar Score XOffset", "ScoreXOffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -1.5,
+        INP_MaxScale = 1.5,
+        INP_Default = 0.0,
+    })
+    InBarImageHeight = self:AddInput("ImageHeight", "ImageHeight", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.119,
+    })
+    InBarImage_Y_Offset = self:AddInput("Image Y Offset", "ImageYOffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -1.5,
+        INP_MaxScale = 1.5,
+        INP_Default = 0.0,
+    })
+
+
+
+    _team_Global_XOffset = self:AddInput("Team Global XOffset", "_team_global_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_team_Global_YOffset = self:AddInput("Team Global YOffset", "_team_global_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_team_Headlines_XOffset = self:AddInput("Headlines XOffset", "_Headlines_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_team_Headlines_YOffset = self:AddInput("Headlines YOffset", "_Headlines_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+_team_SubP_XOffset = self:AddInput("Subplayers XOffset", "_SubP_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = -0.465,
+})
+_team_SubP_YOffset = self:AddInput("Subplayers YOffset", "_SubP_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = -0.465,
+})
+_team_SubP_Scale = self:AddInput("Subplayers Scale", "_SubP_size", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.75,
+})
+
+
+        -- =====================================================================================
+    -- --------------------------_MAIN_CTRLs
+    self:AddControlPage("⬅ EVT")
+    -- =====================================================================================
+    -- Part 1
+
+_EVT_Global_XOffset = self:AddInput("Global XOffset", "_evt_global_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+_EVT_Global_YOffset = self:AddInput("Global YOffset", "_evt_global_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_Global_Height = self:AddInput("Global Height", "_evt_global_Height", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_Global_Spacer = self:AddInput("Global Spacer", "_evt_global_Spacert", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+
+_EVT_Header_Width = self:AddInput("Header Width", "_evt_header_width", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.241,
+})
+
+_EVT_Header_Height = self:AddInput("Header Height", "_evt_header_height", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.017,
+})
+
+_EVT_Header_Spacer = self:AddInput("Header Spacer", "_evt_header_spacer", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_Header_XOffset = self:AddInput("Header XOffset", "_evt_Header_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_Header_YOffset = self:AddInput("Header YOffset", "_evt_Header_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.45,
+})
+
+
+_EVT_Header_Text_XOffset = self:AddInput("Header Text XOffset", "_evt_Header_Text_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_Header_Text_YOffset = self:AddInput("Header Text YOffset", "_evt_Header_Text_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = -0.006,
+})
+_EVT_Header_Text_Spacer = self:AddInput("Header Text Spacer", "_evt_header_text_spacer", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = -0.066,
+})
+    InEmptySpace150 = self:AddInput('    ', 'EmptySpace150', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        ICD_Width = 0.3,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+
+
+    -- =====================================================================================
+    -- Part 2
+
+    _EVT_SubH_Text_XOffset = self:AddInput("SubHeader Text XOffset", "_evt_SubH_Text_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_SubH_Text_YOffset = self:AddInput("SubHeader Text YOffset", "_evt_SubH_Text_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+
+
+_EVT_TeamA_Text_XOffset = self:AddInput("TeamA Text XOffset", "_EVT_TeamA_Text_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_TeamA_Text_YOffset = self:AddInput("TeamA Text YOffset", "_EVT_TeamA_Text_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+
+
+_EVT_TeamAB_Text_XOffset = self:AddInput("TeamAB Text XOffset", "_EVT_TeamAB_Text_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.1805,
+})
+
+_EVT_TeamAB_Text_YOffset = self:AddInput("TeamAB Text YOffset", "_EVT_TeamAB_Text_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = -0.118,
+})
+
+
+
+_EVT_VS_Text_XOffset = self:AddInput("VS Text XOffset", "_EVT_VS_Text_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_VS_Text_YOffset = self:AddInput("VS Text YOffset", "_EVT_VS_Text_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_TeamABV_YOffset = self:AddInput("TeamABV YOffset", "_EVT_TeamABV_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.165,
+})
+
+
+
+
+
+    InEmptySpace180 = self:AddInput('    ', 'EmptySpace180', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        ICD_Width = 0.3,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+
+
+    -- =====================================================================================
+    -- Part 3
+
+
+_EVT_TeamP_H_Text_XOffset = self:AddInput("TeamPlayer Header Text XOffset", "teamplayer_header_text_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_TeamP_H_Text_YOffset= self:AddInput("TeamPlayer Header Text YOffset", "teamplayer_header_text_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+
+_EVT_TeamP_SubH_Text_XOffset = self:AddInput("SubPlayer Header Text XOffset", "subplayer_header_text_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_TeamP_SubH_Text_YOffset= self:AddInput("SubPlayer Header Text YOffset", "subplayer_header_text_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+
+_EVT_TeamP_Left_Width = self:AddInput("TeamPlayer Left Width", "TeamPlayer_Left_width", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.18,
+})
+
+_EVT_TeamP_Left_XOffset = self:AddInput("TeamPlayer Left XOffset", "TeamPlayer_Left_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_TeamP_Left_YOffset = self:AddInput("TeamPlayer Left YOffset", "TeamPlayer_Left_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+
+
+_EVT_TeamP_Left_Text_XOffset = self:AddInput("TeamPlayer Left Text XOffset", "TeamPlayer_Left_text_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_TeamP_Left_Text_YOffset = self:AddInput("TeamPlayer Left Text YOffset", "TeamPlayer_Left_text_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+
+
+_EVT_TeamP_Right_Width = self:AddInput("TeamPlayer Right Width", "TeamPlayer_Right_width", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.18,
+})
+
+_EVT_TeamP_Right_XOffset = self:AddInput("TeamPlayer Right XOffset", "TeamPlayer_Right_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_TeamP_Right_YOffset = self:AddInput("TeamPlayer Right YOffset", "TeamPlayer_Right_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+
+
+_EVT_TeamP_Right_Text_XOffset = self:AddInput("TeamPlayer Right Text XOffset", "TeamPlayer_Right_text_xoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+_EVT_TeamP_Right_Text_YOffset = self:AddInput("TeamPlayer Right Text YOffset", "TeamPlayer_Right_text_yoffset", {
+LINKID_DataType = "Number",
+INPID_InputControl = "ScrewControl",
+INP_Default = 0.0,
+})
+
+
+
+
+
+
+
+
+
+
+
+    -- =====================================================================================
+
+    -- =====================================================================================
+    -- --------------------------_Fact_list_card_B
+    self:AddControlPage("⬅ FLB")
+    _FLB_Global_XOffset = self:AddInput("Global XOffset", "_flB_global_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLB_Header_Width = self:AddInput("Header Width", "_flB_header_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.18,
+    })
+    _FLB_Header_Height = self:AddInput("Header Height", "_flB_header_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.018,
+    })
+    _FLB_Header_Spacer = self:AddInput("Header Spacer", "_flB_header_spacer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.05,
+    })
+    _FLB_Left_Width = self:AddInput("Left Width", "_flB_left_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.18,
+    })
+    _FLB_Global_Height = self:AddInput("Global Height", "_flB_global_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.018,
+    })
+    _FLB_Global_Spacer = self:AddInput("Global Spacer", "_flB_global_spacer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.05,
+    })
+    _FLB_InText_XOffset = self:AddInput("Text XOffset", "_flB_intext_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLB_InText_YOffset = self:AddInput("Text YOffset", "_flB_intext_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLB_Right_Width = self:AddInput("Right Width", "_flB_right_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.18,
+    })
+    _FLB_Right_XOffset = self:AddInput("Right XOffset", "_flB_right_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLB_Right_YOffset = self:AddInput("Right YOffset", "_flB_right_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    -- _FLB_Image_Height
+    -- _FLB_Image_XOffset
+    -- _FLB_Image_YOffset
+    _FLB_Image_Width = self:AddInput("Image Width", "_flB_Image_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.15,
+    })
+    _FLB_Image_Height = self:AddInput("Image Height", "_flB_Image_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.15,
+    })
+    _FLB_Image_XOffset = self:AddInput("Image XOffset", "_flB_Image_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = -0.150,
+    })
+    _FLB_Image_YOffset = self:AddInput("Image YOffset", "_flB_Image_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = -0.20,
+    })
+    _FLB_OverlayIcon_A_Width = self:AddInput("OverlayIcon_A Width", "_flB_overlayicon_a_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.04,
+    })
+    _FLB_OverlayIcon_A_Height = self:AddInput("OverlayIcon_A Height", "_flB_overlayicon_a_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.04,
+    })
+    _FLB_OverlayIcon_A_XOffset = self:AddInput("OverlayIcon_A XOffset", "_flB_overlayicon_a_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLB_OverlayIcon_A_YOffset = self:AddInput("OverlayIcon_A YOffset", "_flB_overlayicon_a_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLB_OverlayIcon_B_Width = self:AddInput("OverlayIcon_B Width", "_flB_overlayicon_b_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.04,
+    })
+    _FLB_OverlayIcon_B_Height = self:AddInput("OverlayIcon_B Height", "_flB_overlayicon_b_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.04,
+    })
+    _FLB_OverlayIcon_B_XOffset = self:AddInput("OverlayIcon_B XOffset", "_flB_overlayicon_b_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLB_OverlayIcon_B_YOffset = self:AddInput("OverlayIcon_B YOffset", "_flB_overlayicon_b_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLB_OverlayIcon_Text_XOffset = self:AddInput("Text XOffset", "_flB_overlayicon_text_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLB_OverlayIcon_Text_YOffset = self:AddInput("Text YOffset", "_flB_overlayicon_text_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    -- ===================================================================================
+    self:AddControlPage("⬅ FLA")
+    _FLA_Global_XOffset = self:AddInput("Global XOffset", "_fla_global_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_Header_Width = self:AddInput("Header Width", "_fla_header_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.18,
+    })
+    _FLA_Header_Height = self:AddInput("Header Height", "_fla_header_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.018,
+    })
+    _FLA_Header_Spacer = self:AddInput("Header Spacer", "_fla_header_spacer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.05,
+    })
+    _FLA_Global_Width = self:AddInput("Global Width", "_fla_global_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.18,
+    })
+    _FLA_Global_Height = self:AddInput("Global Height", "_fla_global_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.018,
+    })
+    _FLA_Global_Spacer = self:AddInput("Global Spacer", "_fla_global_spacer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.05,
+    })
+    _FLA_InText_XOffset = self:AddInput("Text XOffset", "_fla_intext_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_InText_YOffset = self:AddInput("Text YOffset", "_fla_intext_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_Right_Width = self:AddInput("Right Width", "_fla_right_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.18,
+    })
+    _FLA_Right_XOffset = self:AddInput("Right XOffset", "_fla_right_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_Left_XOffset = self:AddInput("Left XOffset", "_fla_left_loffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_Image_Width = self:AddInput("Image Width", "_fla_Image_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.15,
+    })
+    _FLA_Image_Height = self:AddInput("Image Height", "_fla_Image_Height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.15,
+    })
+    _FLA_Image_XOffset = self:AddInput("Image XOffset", "_fla_Image_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_Image_YOffset = self:AddInput("Image YOffset", "_fla_Image_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_OverlayIcon_A_Width = self:AddInput("OverlayIcon_A Width", "_fla_overlayicon_a_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.04,
+    })
+    _FLA_OverlayIcon_A_Height = self:AddInput("OverlayIcon_A Height", "_fla_overlayicon_a_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.04,
+    })
+    _FLA_OverlayIcon_A_XOffset = self:AddInput("OverlayIcon_A XOffset", "_fla_overlayicon_a_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_OverlayIcon_A_YOffset = self:AddInput("OverlayIcon_A YOffset", "_fla_overlayicon_a_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_OverlayIcon_B_Width = self:AddInput("OverlayIcon_B Width", "_fla_overlayicon_b_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.04,
+    })
+    _FLA_OverlayIcon_B_Height = self:AddInput("OverlayIcon_B Height", "_fla_overlayicon_b_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.04,
+    })
+    _FLA_OverlayIcon_B_XOffset = self:AddInput("OverlayIcon_B XOffset", "_fla_overlayicon_b_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_OverlayIcon_B_YOffset = self:AddInput("OverlayIcon_B YOffset", "_fla_overlayicon_b_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_OverlayIcon_Text_XOffset = self:AddInput("Text XOffset", "_fla_overlayicon_text_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _FLA_OverlayIcon_Text_YOffset = self:AddInput("Text YOffset", "_fla_overlayicon_text_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    -- ===================================================================================
+    self:AddControlPage("⬅ SLA")
+    _SLA_Global_XOffset = self:AddInput("Global XOffset", "_sla_global_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLA_Header_Width = self:AddInput("Header Width", "_sla_header_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.2,
+    })
+    _SLA_Header_Height = self:AddInput("Header Height", "_sla_header_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.03,
+    })
+    _SLA_Header_Spacer = self:AddInput("Header Spacer", "_sla_header_spacer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.07,
+    })
+    _SLA_Header_XOffset = self:AddInput("Header XOffset", "_sla_Header_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLA_Header_YOffset = self:AddInput("Header YOffset", "_sla_Header_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLA_Global_Height = self:AddInput("Global Height", "_sla_global_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.018,
+    })
+    _SLA_Global_Spacer = self:AddInput("Global Spacer", "_sla_global_spacer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.05,
+    })
+    _SLA_InText_XOffset = self:AddInput("Text XOffset", "_sla_intext_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.02,
+    })
+    _SLA_InText_YOffset = self:AddInput("Text YOffset", "_sla_intext_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = -0.005,
+    })
+    _SLA_Left_Width = self:AddInput("Left Width", "_sla_Left_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.18,
+    })
+    _SLA_Left_XOffset = self:AddInput("Left XOffset", "_sla_Left_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLA_Left_YOffset = self:AddInput("Left YOffset", "_sla_Left_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLA_Right_Width = self:AddInput("Right Width", "_sla_right_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.02,
+    })
+    _SLA_Right_XOffset = self:AddInput("Right XOffset", "_sla_right_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.02,
+    })
+    _SLA_Right_YOffset = self:AddInput("Right YOffset", "_sla_right_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    -- ===================================================================================
+    self:AddControlPage("⬅ SLB")
+    -- _SLA_Global_XOffset
+    _SLB_Global_XOffset = self:AddInput("Global XOffset", "_slb_global_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLB_Header_Width = self:AddInput("Header Width", "_slb_header_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.18,
+    })
+    _SLB_Header_Height = self:AddInput("Header Height", "_slb_header_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.018,
+    })
+    _SLB_Header_Spacer = self:AddInput("Header Spacer", "_slb_header_spacer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.05,
+    })
+    _SLB_Global_Height = self:AddInput("Global Height", "_slb_global_height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.018,
+    })
+    _SLB_Global_Spacer = self:AddInput("Global Spacer", "_slb_global_spacer", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.05,
+    })
+    _SLB_Left_Width = self:AddInput("Left Width", "_slb_left_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.18,
+    })
+    _SLB_Left_XOffset = self:AddInput("Left XOffset", "_slb_left_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLB_Left_YOffset = self:AddInput("Left YOffset", "_slb_left_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLB_Right_Width = self:AddInput("Right Width", "_slb_right_width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.18,
+    })
+    _SLB_Right_XOffset = self:AddInput("Right XOffset", "_slb_right_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLB_Right_YOffset = self:AddInput("Right YOffset", "_slb_right_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLB_InText_XOffset = self:AddInput("Text XOffset", "_slb_intext_xoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    _SLB_InText_YOffset = self:AddInput("Text YOffset", "_slb_intext_yoffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+    })
+    -- ===================================================================================
+    OutScriptVal = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 1
+    })
+end
+
+function NotifyChanged(inp, param, time)
+    -- when the tools FontFileControl is first created, the FontManager has not yet
+    -- provided a FontList, so we can't set a default value. Instead we do it here.
+    -- --------------
+    if inp == InFont2 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFont2:SetSource(Text("Arial"), time)
+        end
+    elseif inp == InFontStyle2 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFontStyle2:SetSource(Text("Regular"), time)
+        end
+    end
+    -- --------------
+    if inp == InFont3 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFont3:SetSource(Text("Arial"), time)
+        end
+    elseif inp == InFontStyle3 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFontStyle3:SetSource(Text("Regular"), time)
+        end
+    end
+    -- --------------
+    if inp == InFont4 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFont4:SetSource(Text("Arial"), time)
+        end
+    elseif inp == InFontStyle4 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFontStyle4:SetSource(Text("Bold"), time)
+        end
+    end
+    -- ----------------
+    if inp == InFont5 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFont5:SetSource(Text("Arial"), time)
+        end
+    elseif inp == InFontStyle5 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFontStyle5:SetSource(Text("Bold"), time)
+        end
+    end
+    -- --------------
+    if inp == InFont6 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFont6:SetSource(Text("Arial"), time)
+        end
+    elseif inp == InFontStyle6 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFontStyle6:SetSource(Text("Bold"), time)
+        end
+    end
+    -- --------------
+    if inp == InFont7 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFont7:SetSource(Text("Arial"), time)
+        end
+    elseif inp == InFontStyle7 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFontStyle7:SetSource(Text("Bold"), time)
+        end
+    end
+    -- --------------
+    if inp == InFont8 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFont8:SetSource(Text("Arial"), time)
+        end
+    elseif inp == InFontStyle8 then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFontStyle8:SetSource(Text("Bold"), time)
+        end
+    end
+end
+
+-- ----------------------------------------------------------------------------
+function parse_filename(filename)
+    --[[
+        parseFilename() from bmd.scriptlib
+        A function for ripping a filepath into little bits
+        :param FullPath : The raw, original path sent to the function
+        :param FullPathMap : The PathMap expanded original path sent to the function
+        :param Path : The path, without filename
+        :param PathMap : The PathMap expanded path, without filename
+        :param FullName : The name of the clip w\ extension
+        :param Name : The name without extension
+        :param CleanName: The name of the clip, without extension or sequence
+        :param SNum : The original sequence string, or "" if no sequence
+        :param Number : The sequence as a numeric value, or nil if no sequence
+        :param Extension: The raw extension of the clip
+        :param Padding : Amount of padding in the sequence, or nil if no sequence
+        :param UNC : A true or false value indicating whether the path is a UNC path or not
+        :rtype: returns a table with the following
+    ]]
+    local seq = {}
+    seq.FullPath = filename
+    seq.FullPathMap = self.Comp:MapPath(filename)
+    string.gsub(seq.FullPath, "^(.+[/\\])(.+)", function(path, name)
+        seq.Path = path
+        seq.FullName = name
+    end)
+    string.gsub(seq.FullPath, "^(.+[/\\])(.+)",
+        function(path, name)
+            seq.PathMap = self.Comp:MapPath(path)
+            seq.FullName = name
+        end)
+    string.gsub(seq.FullName, "^(.+)(%..+)$", function(name, ext)
+        seq.Name = name
+        seq.Extension = ext
+    end)
+    if not seq.Name then -- no extension?
+        seq.Name = seq.FullName
+    end
+    string.gsub(seq.Name, "^(.-)(%d+)$", function(name, SNum)
+        seq.CleanName = name
+        seq.SNum = SNum
+    end)
+    if seq.SNum then
+        seq.Number = tonumber(seq.SNum)
+        seq.Padding = string.len(seq.SNum)
+    else
+        seq.SNum = ""
+        seq.CleanName = seq.Name
+    end
+    if seq.Extension == nil then seq.Extension = "" end
+    seq.UNC = (string.sub(seq.Path, 1, 2) == [[\\]])
+    return seq
+end
+
+-- ----------------------------------------------------------------------------
+function createText(text, align, fontsize, _font, _style, char_spacing)
+    local utf8 = require "utf8"
+    --print(text)
+    local font = _font
+    local style = _style
+    local size = fontsize
+    local justify = align
+    local line_spacing = 0.005
+    -- get the font's metrics
+    local font = TextStyleFont(font, style)
+    local tfm = TextStyleFontMetrics(font)
+    -- This is the distance between this line and the next one.
+    local line_height = (tfm.TextAscent + tfm.TextDescent + tfm.TextExternalLeading) * 10 * size + line_spacing
+    local x_move = 0
+    local mat = Matrix4()
+    mat:Scale(1.0 / tfm.Scale, 1.0 / tfm.Scale, 1.0)
+    mat:Scale(size, size, 1)
+    -- set the initial baseline position of the text cursor
+    local sh, ch, prevch
+    local shape = Shape()
+    mat:Move(0, 0, 0)
+    -- split the text into separate lines
+    for line in string.gmatch(text, "%C+") do
+        -- First pass, work on what the total width of this line is going to be
+        local line_width = 0
+        for i = 1, #line do
+            ch = utf8.unicode(utf8.sub(line, i, i))
+            if ch == nil then ch = utf8.unicode(" ") end
+            line_width = line_width + tfm:CharacterWidth(ch) * (10 + char_spacing) * size
+        end
+        if justify == 0 then
+            mat:Move(0, 0, 0)
+        elseif justify == 1 then
+            mat:Move(-line_width / 2, 0, 0)
+        elseif justify == 2 then
+            mat:Move(-line_width, 0, 0)
+        end
+        -- Second pass, now assemble the actual shape
+        for i = 1, #line do
+            prevch = ch
+            ch = utf8.unicode(utf8.sub(line, i, i))
+            if ch == nil or prevch == nil then ch = utf8.unicode(" ") end
+            -- get the character's width
+            local cw = tfm:CharacterWidth(ch) * (10 + char_spacing) * size
+            -- if there is a previous character, get the kerning between the current character and the last one
+            if prevch then
+                local x_offset = tfm:CharacterKerning(prevch, ch) * (10 + char_spacing) * size
+                x_move = x_move + x_offset
+                mat:Move(x_offset, 0, 0)
+            end
+            -- move the cursor to the center of the character
+            mat:Move(cw / 2, 0, 0)
+            -- render the shape we are interested in
+            sh = tfm:GetCharacterShape(ch, false)
+            sh = sh:TransformOfShape(mat)
+            -- move the text cursor to the end of the glyph
+            mat:Move(cw / 2, 0, 0)
+            x_move = x_move + cw
+            shape:AddShape(sh)
+        end
+        -- line end, move the cursor back to the start
+        if justify == 0 then
+            mat:Move(-x_move, -line_height, 0)
+        elseif justify == 1 then
+            mat:Move(-x_move / 2, -line_height, 0)
+        elseif justify == 2 then
+            mat:Move(0, -line_height, 0)
+        end
+        x_move = 0
+    end
+    return shape
+end
+
+-- ----------------------------------------------------------------------------
+function createBar(bar_width, bar_height, roundCorners, shear)
+    local mat = Matrix4()
+    mat:Identity()
+    mat:Shear(-(shear), 0.0, 0.0)
+    local _bar = Shape()
+    _bar:AddRectangle(-bar_width, bar_width, -(bar_height), bar_height, roundCorners, 8)
+    _bar = _bar:TransformOfShape(mat)
+    return _bar
+end
+
+-- ----------------------------------------------------------------------------
+function extend(t1, t2)
+    return table.move(t2, 1, #t2, #t1 + 1, t1)
+end
+
+-- ----------------------------------------------------------------------------
+function Process(req)
+    -- [[ Creates the output. ]]
+    local tbl_A = InScriptVal1:GetValue(req):GetValue()
+    local tbl_B = InScriptVal2:GetValue(req):GetValue()
+    local segment = Shape()
+    ---------------LOAD FONT----------------------------
+    --char_spacing1
+    ---[[
+    local font_2 = InFont2:GetValue(req).Value
+    local fontsize_2 = InFontSize2:GetValue(req).Value
+    local style_2 = InFontStyle2:GetValue(req).Value
+    local char_spacing2 = InCharSpacing2:GetValue(req).Value
+    local font_3 = InFont3:GetValue(req).Value
+    local fontsize_3 = InFontSize3:GetValue(req).Value
+    local style_3 = InFontStyle3:GetValue(req).Value
+    local char_spacing3 = InCharSpacing3:GetValue(req).Value
+    local font_4 = InFont4:GetValue(req).Value
+    local fontsize_4 = InFontSize4:GetValue(req).Value
+    local style_4 = InFontStyle4:GetValue(req).Value
+    local char_spacing4 = InCharSpacing4:GetValue(req).Value
+    local font_5 = InFont5:GetValue(req).Value
+    local fontsize_5a = InFontSize5a:GetValue(req).Value
+    local fontsize_5b = InFontSize5b:GetValue(req).Value
+    local style_5 = InFontStyle5:GetValue(req).Value
+    local char_spacing5 = InCharSpacing5:GetValue(req).Value
+    local font_6 = InFont6:GetValue(req).Value
+    local fontsize_6 = InFontSize6:GetValue(req).Value
+    local style_6 = InFontStyle6:GetValue(req).Value
+    local char_spacing6 = InCharSpacing6:GetValue(req).Value
+    local font_7 = InFont7:GetValue(req).Value
+    local fontsize_7 = InFontSize7:GetValue(req).Value
+    local style_7 = InFontStyle7:GetValue(req).Value
+    local char_spacing7 = InCharSpacing7:GetValue(req).Value
+    local font_8 = InFont8:GetValue(req).Value
+    local fontsize_8 = InFontSize8:GetValue(req).Value
+    local style_8 = InFontStyle8:GetValue(req).Value
+    local char_spacing8 = InCharSpacing8:GetValue(req).Value
+    local movenum = InMoveNumber:GetValue(req).Value
+    --[[
+local fonts = {}
+local fontSizes = {}
+local styles = {}
+local charSpacings = {}
+for i = 2, 8 do
+    fonts[i] = _G["InFont" .. i]:GetValue(req).Value
+    fontSizes[i] = _G["InFontSize" .. i]:GetValue(req).Value
+    styles[i] = _G["InFontStyle" .. i]:GetValue(req).Value
+    charSpacings[i] = _G["InCharSpacing" .. i]:GetValue(req).Value
+end
+--]]
+    if not next(FontManager:GetFontList()) then
+        FontManager:ScanDir()
+    end
+    ---------------------------------------------------------------
+    -- create_Images
+    --==========================================================================
+    --local function create_Interface()
+    local LabelTitle_2 = [[
+<table align="center" cellspacing="10">
+  <tr>
+    <th></th>
+    <th style="background-color: #000000; text-align: center;" colspan="30">]] .. tbl_B[4] .. tbl_B[8] .. [[</th>
+    <th></th>
+  </tr>
+</table>
+  ]]
+    local LabelTitle_3 = [[
+<table align="center" cellspacing="10">
+  <tr>
+    <td></td>
+    <td style="background-color: #000000; text-align: center;" colspan="30">]] .. tbl_B[6] .. tbl_B[7] .. [[</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td style="background-color: #000000; text-align: center;" colspan="30">]] .. tbl_B[9] .. [[</td>
+    <td></td>
+  </tr>
+</table>
+]]
+    local LabelTitle_4 = [[
+<table align="center" cellspacing="10">
+  <tr>
+    <td></td>
+    <td style="background-color: #000000; text-align: center;" colspan="12">]] .. tbl_B[10] .. [[</td>
+    <td></td>
+    <td>vs</td>
+    <td></td>
+    <td style="background-color: #000000; text-align: center;" colspan="12">]] .. tbl_B[12] .. [[</td>
+    <td></td>
+  </tr>
+</table>
+]]
+    local LabelTitle_5 = [[
+<table align="center" cellspacing="10">
+  <tr>
+    <td></td>
+    <td style="text-align: center;" colspan="30">Players</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td style="background-color: #000000; text-align: center;" colspan="30">1. ]] .. tbl_B[16] .. [[</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td style="text-align: center;" colspan="30">Subplayers</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td style="background-color: #000000; text-align: center;" colspan="30">12. ]] .. tbl_B[38] .. [[</td>
+    <td></td>
+  </tr>
+</table>
+]]
+    local LabelTitle_6 = [[
+<table align="center" cellspacing="10">
+  <tr>
+    <td></td>
+    <td style="background-color: #000000; text-align: center;" colspan="30">A DISPOSIZIONE</td>
+    <td></td>
+  </tr>
+</table>
+  ]]
+    local LabelTitle_7 = [[
+<table align="center" cellspacing="10">
+  <tr>
+    <td></td>
+    <td style="background-color: #000000; text-align: center;" colspan="30">STARTING XI</td>
+    <td></td>
+  </tr>
+</table>
+  ]]
+    local LabelTitle_8 = [[
+<table align="center" cellspacing="10">
+  <tr>
+    <td></td>
+    <td style="background-color: #000000; text-align: center;" colspan="30">Modulo:]] .. tbl_B[63] .. [[</td>
+    <td></td>
+  </tr>
+</table>
+  ]]
+    InLabel2:SetSource(Text(LabelTitle_2), 0)
+    InLabel3:SetSource(Text(LabelTitle_3), 0)
+    InLabel4:SetSource(Text(LabelTitle_4), 0)
+    InLabel5:SetSource(Text(LabelTitle_5), 0)
+    InLabel6:SetSource(Text(LabelTitle_6), 0)
+    InLabel7:SetSource(Text(LabelTitle_7), 0)
+    InLabel8:SetSource(Text(LabelTitle_8), 0)
+    --
+    --end
+    --create_Interface()
+    local shape_texture = {}
+    local imgPath = tbl_B
+    local function create_Images()
+        -- -----------------------------------------------------------------------
+        local imgHolder = {}
+        local image_tbl = { { Name = imgPath[3] }, { Name = imgPath[5] },
+            { Name = imgPath[11] }, { Name = imgPath[13] } }
+        local rel_path = parse_filename(InFile:GetValue(req).Value).FullPath
+        for i = 1, #image_tbl do
+            -- -----------------------------------------------------------------------
+            local filename = rel_path .. image_tbl[i].Name
+            local t = InTime:GetValue(req).Value
+            -- -----------------------------------------------------------------------
+            -- Verify the file exists
+            if bmd.fileexists(filename) == true then
+                local frame = 0
+                local time_mode = 0
+                local tbl = parse_filename(filename)
+                -- Get the image clip
+                local clip = Clip(filename, false)
+                -- Read the first frame of the image sequence
+                clip:Open()
+                imgHolder[i] = clip:GetFrame(frame)
+                clip:Close()
+            else
+                -- Fallback to a blank canvas when no image is found
+                local compWidth = self.Comp:GetPrefs('Comp.FrameFormat.Width') or 1920
+                local compHeight = self.Comp:GetPrefs('Comp.FrameFormat.Height') or 1080
+                emptyImage = Image({
+                    IMG_Width = compWidth,
+                    IMG_Height = compHeight,
+                })
+                -- Pixel defaults to black/clear
+                imgHolder[i] = emptyImage:Fill(Pixel({ R = 0.5, G = 0.5, B = 0.5, A = 1 }))
+            end
+        end
+        ------------------------------------------------------------------
+
+        local align = "center"
+        local cellspacing = 10
+        local LoadTeamsImage = [[
+      <table align="]] .. align .. [[" cellspacing="]] .. cellspacing .. [[">
+      <tr>
+        <th rowspan="2"><img width="70" height="70" src="]] .. rel_path .. image_tbl[3].Name .. [["></th>
+        <th></th>
+        <th rowspan="2"><img width="70" height="70" src="]] .. rel_path .. image_tbl[4].Name .. [["></th>
+      </tr>
+      <tr>
+        <td>vs</td>
+      </tr>
+      <tr>
+        <td style="text-align:center">]] .. tbl_B[10] .. [[</td>
+        <td></td>
+        <td style="text-align:center">]] .. tbl_B[12] .. [[</td>
+      </tr>
+    </table>
+    ]]
+        --print(rel_path .. image_tbl[3].Name)
+        InLabel1:SetSource(Text(LoadTeamsImage), 0)
+        local sh = Shape()
+        local startAt = 5
+        local output_matrix_1 = {
+            tbl_A[startAt + 1][1][3], tbl_A[startAt + 1][1][4],
+            tbl_A[startAt + 1][1][1], -tbl_A[startAt + 1][1][2] }
+        local output_matrix_2 = {
+            tbl_A[startAt + 2][1][3], tbl_A[startAt + 2][1][4],
+            tbl_A[startAt + 2][1][1], -tbl_A[startAt + 2][1][2] }
+        local output_matrix_3 = {
+            tbl_A[startAt + 3][1][3], tbl_A[startAt + 3][1][4],
+            tbl_A[startAt + 3][1][1], -tbl_A[startAt + 3][1][2] }
+        local output_matrix_4 = {
+            tbl_A[startAt + 4][1][3], tbl_A[startAt + 4][1][4],
+            tbl_A[startAt + 4][1][1], -tbl_A[startAt + 4][1][2] }
+        table.insert(shape_texture, {
+            { imgHolder[1], output_matrix_1, sh, sh },
+            { imgHolder[2], output_matrix_2, sh, sh },
+            { imgHolder[3], output_matrix_3, sh, sh },
+            { imgHolder[4], output_matrix_4, sh, sh },
+            { sh,           sh,              sh, sh } })
+    end
+    --==========================================================================
+    ---------------------------------------------------------------
+    -- create_Header
+    --==========================================================================
+
+local _evt_G_XOffset = _EVT_Global_XOffset:GetValue(req).Value
+local _evt_G_YOffset = _EVT_Global_YOffset:GetValue(req).Value
+
+
+
+local _team_G_XOffset = _team_Global_XOffset:GetValue(req).Value
+local _team_G_YOffset = _team_Global_YOffset:GetValue(req).Value
+
+    local header_tbl = {}
+local function create_Header()
+
+
+
+
+
+    local _evt_G_Height=_EVT_Global_Height:GetValue(req).Value
+    local _evt_G_Spacer=_EVT_Global_Spacer:GetValue(req).Value
+
+    local _evt_H_Width =_EVT_Header_Width:GetValue(req).Value
+    local _evt_H_Height=_EVT_Header_Height:GetValue(req).Value
+
+    local _evt_H_Spacer=_EVT_Header_Spacer:GetValue(req).Value
+
+    local _evt_H_XOffset=_EVT_Header_XOffset:GetValue(req).Value
+    local _evt_H_YOffset=_EVT_Header_YOffset:GetValue(req).Value
+
+    local _evt_HT_XOffset=_EVT_Header_Text_XOffset:GetValue(req).Value
+    local _evt_HT_YOffset=_EVT_Header_Text_YOffset:GetValue(req).Value
+    local _evt_HT_Spacer=_EVT_Header_Text_Spacer:GetValue(req).Value
+
+
+
+  -- -------------------------------------------------------------TODO
+
+
+        local sh = Shape()
+        local mat = Matrix4()
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        local bar_width = 0.241
+        local bar_height = 0.017
+        local gap = 0.01
+        local event_logo_width = 0.1
+        local event_logo_text_ypos = 0.075
+        local event_headline_text_ypos = -0.007
+        local event_subheadline_text_ypos = -0.07
+        local roundCorners = 0.001
+        local event_logo_l_xpos = -0.07
+        local event_logo_r_xpos = 0.07
+        local index = 1
+        local startAt = 2
+        local _header_Y_Offset = 0.405
+        local isHightlighted = "false"
+        local _event_headline_bg = createBar(_evt_H_Width, _evt_H_Height, roundCorners, 0.76)
+        local _event_headline_text = createText(tbl_B[4] .. tbl_B[8], 1, fontsize_2, font_2, style_2, char_spacing2)
+        local _event_subheadline_text = createText(tbl_B[6] .. tbl_B[7] .. "\n" .. tbl_B[9], 1, fontsize_3, font_3,
+            style_3, char_spacing3)
+
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        _event_headline_bg = _event_headline_bg:TransformOfShape(mat)
+
+        mat:Identity()
+        mat:Move(_evt_HT_XOffset, _evt_HT_YOffset, 1.0)
+        _event_headline_text = _event_headline_text:TransformOfShape(mat)
+
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        _event_subheadline_text = _event_subheadline_text:TransformOfShape(mat)
+
+
+        -- Animation settings --
+        mat:Identity()
+        mat:Scale(tbl_A[startAt][1][3], tbl_A[startAt][1][4], 1.0)
+        mat:Move(tbl_A[startAt][1][1], -tbl_A[startAt][1][2], 1.0)
+        mat:Move(_evt_G_XOffset, _evt_H_YOffset, 1.0)
+        _event_headline_bg = _event_headline_bg:TransformOfShape(mat)
+        _event_headline_text = _event_headline_text:TransformOfShape(mat)
+
+
+        mat:Identity()
+        mat:Scale(tbl_A[startAt + 1][1][3], tbl_A[startAt + 1][1][4], 1.0)
+        mat:Move(tbl_A[startAt + 1][1][1], _evt_HT_Spacer - (tbl_A[startAt + 1][1][2]), 1.0)
+        mat:Move(_evt_G_XOffset, _evt_H_YOffset, 1.0)
+
+
+        _event_subheadline_text = _event_subheadline_text:TransformOfShape(mat)
+        table.insert(header_tbl, {
+            {
+                { { sh, sh, _event_headline_bg, _event_headline_text }, layer = 3 },
+                { { sh, sh, sh, _event_subheadline_text },              layer = 4 },
+            },
+            selected = isHightlighted
+        })
+        local align = "center"
+        local cellspacing = 10
+        local LabelTitle_1 = [[
+        <table align="center" cellspacing="10"><tr> <th>1.</th>
+        <th style="background-color: #000000;" colspan="2">]] .. tbl_B[4] .. tbl_B[8] .. [[</th>
+        </tr></table>
+        ]]
+        --InLabel2:SetSource(Text(LabelTitle_1), 0)
+end
+    --==========================================================================
+    --------------------------------------------------------------
+    -- create_Subheader
+    --==========================================================================
+    local subheader_tbl = {}
+local function create_Subheader()
+
+
+        local _evt_ST_XOffset=_EVT_SubH_Text_XOffset:GetValue(req).Value
+        local _evt_ST_YOffset=_EVT_SubH_Text_YOffset:GetValue(req).Value
+
+        local _evt_TA_T_XOffset=_EVT_TeamA_Text_XOffset:GetValue(req).Value
+        local _evt_TA_T_YOffset=_EVT_TeamA_Text_YOffset:GetValue(req).Value
+
+        local _evt_TAB_T_XOffset=_EVT_TeamAB_Text_XOffset:GetValue(req).Value
+        local _evt_TAB_T_YOffset=_EVT_TeamAB_Text_YOffset:GetValue(req).Value
+        local _evt_TABV_YOffset=_EVT_TeamABV_YOffset:GetValue(req).Value
+
+        local _evt_VS_T_XOffset=_EVT_VS_Text_XOffset:GetValue(req).Value
+        local _evt_VS_T_YOffset=_EVT_VS_Text_YOffset:GetValue(req).Value
+
+
+
+
+
+
+        local sh = Shape()
+        local mat = Matrix4()
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        local bar_width = 0.03
+        local bar_height = 0.018
+        local gap = 0.02
+        local roundCorners = 10
+        local team_Bar_width = 0.2
+        local team_A_xpos = -(0.1805)
+        local team_AB_logo_ypos = 0.0275
+
+
+        local vs_current_ypos = -0.08
+        local vs_past_ypos = -0.12
+        local vs_ypos = 0.01
+        local startAt = 4
+
+        local isHightlighted = "false"
+        local _team_A_name = createText(tbl_B[10], 1, fontsize_4, font_4, style_4, char_spacing4)
+        local _team_B_name = createText(tbl_B[12], 1, fontsize_4, font_4, style_4, char_spacing4)
+        local _VS = createText("VS", 1, fontsize_4, font_4, style_4, char_spacing4)
+
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        _team_A_name = _team_A_name:TransformOfShape(mat)
+
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        _team_B_name = _team_B_name:TransformOfShape(mat)
+
+        mat:Identity()
+        mat:Move(_evt_VS_T_XOffset, _evt_VS_T_YOffset, 1.0)
+        _VS = _VS:TransformOfShape(mat)
+
+        mat:Identity()
+        mat:Scale(tbl_A[startAt][1][3], tbl_A[startAt][1][4], 1.0)
+        mat:Move(tbl_A[startAt][1][1], -tbl_A[startAt][1][2], 1.0)
+        mat:Move(_evt_G_XOffset, _evt_TABV_YOffset, 1.0)
+        _VS = _VS:TransformOfShape(mat)
+
+        mat:Identity()
+        mat:Scale(tbl_A[startAt + 1][1][3], tbl_A[startAt + 1][1][4], 1.0)
+        mat:Move(-_evt_TAB_T_XOffset + tbl_A[startAt + 1][1][1], _evt_TAB_T_YOffset - tbl_A[startAt + 1][1][2], 1.0)
+        mat:Move(_evt_G_XOffset, _evt_TABV_YOffset, 1.0)
+        _team_A_name = _team_A_name:TransformOfShape(mat)
+
+        mat:Identity()
+        mat:Scale(tbl_A[startAt + 2][1][3], tbl_A[startAt + 2][1][4], 1.0)
+        mat:Move(_evt_TAB_T_XOffset + tbl_A[startAt + 2][1][1], _evt_TAB_T_YOffset - tbl_A[startAt + 2][1][2], 1.0)
+        mat:Move(_evt_G_XOffset, _evt_TABV_YOffset, 1.0)
+        _team_B_name = _team_B_name:TransformOfShape(mat)
+        table.insert(subheader_tbl, {
+            {
+                { { sh, sh, sh, _team_A_name }, layer = 3 },
+                { { sh, sh, sh, _team_B_name }, layer = 3 },
+                { { sh, sh, sh, _VS },          layer = 3 },
+            },
+            selected = isHightlighted
+        })
+end
+
+    --------------------------------------------------------------
+    --==========================================================================
+    -- create_Score_list_A
+    --==========================================================================
+    local score_list_A_tbl = {}
+    local function create_Score_list_A()
+        local _sla_G_XOffset = _SLA_Global_XOffset:GetValue(req).Value
+        local _sla_H_Width = _SLA_Header_Width:GetValue(req).Value
+        local _sla_H_Height = _SLA_Header_Height:GetValue(req).Value
+        local _sla_H_Spacer = _SLA_Header_Spacer:GetValue(req).Value
+        local _sla_H_XOffset = _SLA_Header_XOffset:GetValue(req).Value
+        local _sla_H_YOffset = _SLA_Header_YOffset:GetValue(req).Value
+        local _sla_G_Height = _SLA_Global_Height:GetValue(req).Value
+        local _sla_G_Spacer = _SLA_Global_Spacer:GetValue(req).Value
+        local _sla_T_XOffset = _SLA_InText_XOffset:GetValue(req).Value
+        local _sla_T_YOffset = _SLA_InText_YOffset:GetValue(req).Value
+        local _sla_L_Width = _SLA_Left_Width:GetValue(req).Value
+        local _sla_L_XOffset = _SLA_Left_XOffset:GetValue(req).Value
+        local _sla_L_YOffset = _SLA_Left_YOffset:GetValue(req).Value
+        local _sla_R_Width = _SLA_Right_Width:GetValue(req).Value
+        local _sla_R_XOffset = _SLA_Right_XOffset:GetValue(req).Value
+        local _sla_R_YOffset = _SLA_Right_YOffset:GetValue(req).Value
+        local tbl_A = InScriptVal1:GetValue(req):GetValue()
+        local tbl_B = InScriptVal2:GetValue(req):GetValue()
+        local from = InFrom:GetValue(req).Value
+        local to = InTo:GetValue(req).Value
+        local step = InStep:GetValue(req).Value
+        local isHightlighted = "false"
+        local mat = Matrix4()
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        -- new settings
+        local roundCorners = 0.001
+        local shearCorners = 0.0 --0.40
+        local shadow = { 0.004, -0.005 }
+        local rows = 1
+        local columns = 11
+        local index = 1
+        local sh = Shape()
+        local startAt = 6
+        local startCSV = 13
+        local _teamplayers_Y_Offset = -0.015
+        local _team_trainer_grp = {}
+        local _team_trainer_bg = createBar(_sla_H_Width, _sla_H_Height, roundCorners,
+            shearCorners)
+        local _team_trainer_shd = _team_trainer_bg
+        local _team_trainer_name = createText(tbl_B[4], 1, fontsize_5a, font_5, style_5, char_spacing5)
+        mat:Identity()
+        mat:Move(0, _sla_T_YOffset, 1.0)
+        _team_trainer_name = _team_trainer_name:TransformOfShape(mat)
+        mat:Identity()
+        mat:Move(shadow[1], shadow[2], 1.0)
+        _team_trainer_shd = _team_trainer_shd:TransformOfShape(mat)
+        mat:Identity()
+        mat:Move(_sla_H_XOffset, _sla_H_YOffset, 1.0)
+        _team_trainer_shd = _team_trainer_shd:TransformOfShape(mat)
+        _team_trainer_bg = _team_trainer_bg:TransformOfShape(mat)
+        _team_trainer_name = _team_trainer_name:TransformOfShape(mat)
+        _team_trainer_grp = { sh, _team_trainer_shd, _team_trainer_bg, _team_trainer_name }
+        mat:Identity()
+        mat:Scale(tbl_A[startAt + 12][1][3], tbl_A[startAt + 12][1][4], 1.0)
+        mat:Move(tbl_A[startAt + 12][1][1], tbl_A[startAt + 12][1][2], 1.0)
+        mat:Move(_sla_G_XOffset, _sla_H_Spacer, 1.0)
+        for i = 1, #_team_trainer_grp do
+            _team_trainer_grp[i] = _team_trainer_grp[i]:TransformOfShape(mat)
+        end
+        for j = 1, columns do
+            local _mainBG_items = Shape()
+            local _mainText_items = Shape()
+            if j >= from and j <= to then
+                isHightlighted = "true"
+            else
+                isHightlighted = "false"
+            end
+            local _num_bg = createBar(_sla_R_Width, _sla_G_Height, roundCorners, shearCorners)
+            local _num_shd = _num_bg
+            local _num = createText(tbl_B[startCSV + (2 * j)], 1, fontsize_5a, font_5, style_5, char_spacing5)
+            mat:Identity()
+            mat:Move(0, _sla_T_YOffset, 1.0)
+            _num = _num:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(shadow[1], shadow[2], 1.0)
+            _num_shd = _num_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(((_sla_L_Width * 2) / 2) + _sla_R_Width + _sla_R_XOffset + _sla_G_XOffset, 0.0, 1.0)
+            _num_shd = _num_shd:TransformOfShape(mat)
+            _num_bg = _num_bg:TransformOfShape(mat)
+            _num = _num:TransformOfShape(mat)
+            local _num_grp = { sh, _num_shd, _num_bg, _num }
+            -- --------------------------------------------
+            local _team_bg = createBar(_sla_L_Width, _sla_G_Height, roundCorners, shearCorners)
+            local _team_shd = _team_bg
+            local _team_player_name = createText(tbl_B[startCSV + (2 * j) + 1], 0, fontsize_5a, font_5, style_5,
+                char_spacing5)
+            mat:Identity()
+            mat:Move((-_sla_L_Width) + _sla_T_XOffset + _sla_G_XOffset, _sla_T_YOffset, 1.0)
+            _team_player_name = _team_player_name:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(shadow[1], shadow[2], 1.0)
+            _team_shd = _team_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(0 + _sla_G_XOffset, 0, 1.0)
+            _team_shd = _team_shd:TransformOfShape(mat)
+            _team_bg = _team_bg:TransformOfShape(mat)
+            local _team = {}
+            local _team_grp = { sh, _team_shd, _team_bg, _team_player_name }
+            mat:Identity()
+            mat:Scale(tbl_A[startAt + j][1][3], tbl_A[startAt + j][1][4], 1.0)
+            mat:Move(tbl_A[startAt + j][1][1], -(_sla_G_Spacer * (index - 1) + tbl_A[startAt + j][1][2]), 1.0)
+            for i = 1, #_team_grp do
+                _team_grp[i] = _team_grp[i]:TransformOfShape(mat)
+                _num_grp[i] = _num_grp[i]:TransformOfShape(mat)
+            end
+            table.insert(score_list_A_tbl, index, {
+                {
+                    { _num_grp,  layer = 3 },
+                    { _team_grp, layer = 4 } },
+                selected = isHightlighted
+            })
+            index = index + 1
+        end
+        table.insert(score_list_A_tbl, {
+            {
+                { _team_trainer_grp, layer = 2 } },
+            selected = isHightlighted
+        })
+    end
+    --------------------------------------------------------------
+    --==========================================================================
+    -- create_Score_list_B
+    --==========================================================================
+    local score_list_B_tbl = {}
+    local function create_Score_list_B()
+        local _slb_G_XOffset = _SLB_Global_XOffset:GetValue(req).Value
+        local _slb_H_Width = _SLB_Header_Width:GetValue(req).Value
+        local _slb_H_Height = _SLB_Header_Height:GetValue(req).Value
+        local _slb_H_Spacer = _SLB_Header_Spacer:GetValue(req).Value
+        local _slb_G_Height = _SLB_Global_Height:GetValue(req).Value
+        local _slb_G_Spacer = _SLB_Global_Spacer:GetValue(req).Value
+        local _slb_T_XOffset = _SLB_InText_XOffset:GetValue(req).Value
+        local _slb_T_YOffset = _SLB_InText_YOffset:GetValue(req).Value
+        local _slb_L_Width = _SLB_Left_Width:GetValue(req).Value
+        local _slb_L_XOffset = _SLB_Left_XOffset:GetValue(req).Value
+        local _slb_L_YOffset = _SLB_Left_YOffset:GetValue(req).Value
+        local _slb_R_Width = _SLB_Right_Width:GetValue(req).Value
+        local _slb_R_XOffset = _SLB_Right_XOffset:GetValue(req).Value
+        local _slb_R_YOffset = _SLB_Right_YOffset:GetValue(req).Value
+        local tbl_A = InScriptVal1:GetValue(req):GetValue()
+        local tbl_B = InScriptVal2:GetValue(req):GetValue()
+        local from = InFrom:GetValue(req).Value
+        local to = InTo:GetValue(req).Value
+        local step = InStep:GetValue(req).Value
+        local isHightlighted = "false"
+        local mat = Matrix4()
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        local roundCorners = 0.001
+        local shearCorners = 0.0 --0.40
+        local shadow = { 0.004, -0.005 }
+        local rows = 1
+        local columns = 11
+        local index = 1
+        local sh = Shape()
+        local startAt = 6
+        local startCSV = 13
+        for j = 1, columns do
+            local _mainBG_items = Shape()
+            local _mainText_items = Shape()
+            if j >= from and j <= to then
+                isHightlighted = "true"
+            else
+                isHightlighted = "false"
+            end
+            local _rightBar_bg = createBar(_slb_R_Width, _slb_G_Height, roundCorners, shearCorners)
+            local _rightBar_shd = _rightBar_bg
+            local _rightBar = createText(tbl_B[startCSV + (2 * j)], 1, fontsize_5a, font_5, style_5, char_spacing5)
+            mat:Identity()
+            mat:Move(0, _slb_T_YOffset, 1.0)
+            _rightBar = _rightBar:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(shadow[1], shadow[2], 1.0)
+            _rightBar_shd = _rightBar_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(((_slb_L_Width * 2) / 2) + _slb_R_Width, 0.0, 1.0)
+            mat:Move(_slb_R_XOffset + _slb_G_XOffset, 0, 1.0)
+            _rightBar_shd = _rightBar_shd:TransformOfShape(mat)
+            _rightBar_bg = _rightBar_bg:TransformOfShape(mat)
+            _rightBar = _rightBar:TransformOfShape(mat)
+            local _rightBar_grp = { sh, _rightBar_shd, _rightBar_bg, _rightBar }
+            -- --------------------------------------------
+            local _leftBar_bg = createBar(_slb_L_Width, _slb_G_Height, roundCorners, shearCorners)
+            local _leftBar_shd = _leftBar_bg
+            local _leftBar = createText(tbl_B[startCSV + (2 * j) + 1], 0, fontsize_5a, font_5, style_5,
+                char_spacing5)
+            mat:Identity()
+            mat:Move((-_slb_L_Width) + _slb_T_XOffset, _slb_T_YOffset, 1.0)
+            _leftBar = _leftBar:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(shadow[1], shadow[2], 1.0)
+            _leftBar_shd = _leftBar_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(_slb_L_XOffset + _slb_G_XOffset, 0, 1.0)
+            _leftBar_shd = _leftBar_shd:TransformOfShape(mat)
+            _leftBar_bg = _leftBar_bg:TransformOfShape(mat)
+            _leftBar = _leftBar:TransformOfShape(mat)
+            local _leftBar_grp = { sh, _leftBar_shd, _leftBar_bg, _leftBar }
+            mat:Identity()
+            mat:Scale(tbl_A[startAt + j][1][3], tbl_A[startAt + j][1][4], 1.0)
+            mat:Move(tbl_A[startAt + j][1][1], -(_slb_G_Spacer * (index - 1) + tbl_A[startAt + j][1][2]), 1.0)
+            for i = 1, #_leftBar_grp do
+                _leftBar_grp[i] = _leftBar_grp[i]:TransformOfShape(mat)
+                _rightBar_grp[i] = _rightBar_grp[i]:TransformOfShape(mat)
+            end
+            table.insert(score_list_B_tbl, index, {
+                {
+                    { _rightBar_grp, layer = 3 },
+                    { _leftBar_grp,  layer = 4 } },
+                selected = isHightlighted
+            })
+            index = index + 1
+        end
+    end
+    --------------------------------------------------------------
+    --
+    --==========================================================================
+    -- create_Fact_list_card_A
+    --==========================================================================
+    local fact_list_card_A_tbl = {}
+    local function create_Fact_list_card_A()
+        local _fla_G_XOffset = _FLA_Global_XOffset:GetValue(req).Value
+        local _fla_H_Width = _FLA_Header_Width:GetValue(req).Value
+        local _fla_H_Height = _FLA_Header_Height:GetValue(req).Value
+        local _fla_H_Spacer = _FLA_Header_Spacer:GetValue(req).Value
+        local _fla_G_Width = _FLA_Global_Width:GetValue(req).Value
+        local _fla_G_Height = _FLA_Global_Height:GetValue(req).Value
+        local _fla_G_Spacer = _FLA_Global_Spacer:GetValue(req).Value
+        local _fla_T_XOffset = _FLA_InText_XOffset:GetValue(req).Value
+        local _fla_T_YOffset = _FLA_InText_YOffset:GetValue(req).Value
+        local _fla_R_Width = _FLA_Right_Width:GetValue(req).Value
+        local _fla_L_XOffset = _FLA_Left_XOffset:GetValue(req).Value
+        local _fla_R_XOffset = _FLA_Right_XOffset:GetValue(req).Value
+        local _fla_I_Width = _FLA_Image_Width:GetValue(req).Value
+        local _fla_I_Height = _FLA_Image_Height:GetValue(req).Value
+        local _fla_I_XOffset = _FLA_Image_XOffset:GetValue(req).Value
+        local _fla_I_YOffset = _FLA_Image_YOffset:GetValue(req).Value
+        local _fla_OI_A_Width = _FLA_OverlayIcon_A_Width:GetValue(req).Value
+        local _fla_OI_A_Height = _FLA_OverlayIcon_A_Height:GetValue(req).Value
+        local _fla_OI_A_XOffset = _FLA_OverlayIcon_A_XOffset:GetValue(req).Value
+        local _fla_OI_A_YOffset = _FLA_OverlayIcon_A_YOffset:GetValue(req).Value
+        local _fla_OI_B_Width = _FLA_OverlayIcon_B_Width:GetValue(req).Value
+        local _fla_OI_B_Height = _FLA_OverlayIcon_B_Height:GetValue(req).Value
+        local _fla_OI_B_XOffset = _FLA_OverlayIcon_B_XOffset:GetValue(req).Value
+        local _fla_OI_B_YOffset = _FLA_OverlayIcon_B_YOffset:GetValue(req).Value
+        local _fla_OI_T_XOffset = _FLA_OverlayIcon_Text_XOffset:GetValue(req).Value
+        local _fla_OI_T_YOffset = _FLA_OverlayIcon_Text_YOffset:GetValue(req).Value
+        local tbl_A = InScriptVal1:GetValue(req):GetValue()
+        local tbl_B = InScriptVal2:GetValue(req):GetValue()
+        local from = InFrom:GetValue(req).Value
+        local to = InTo:GetValue(req).Value
+        local step = InStep:GetValue(req).Value
+        local isHightlighted = "false"
+        local mat = Matrix4()
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        local num_Bar_width = InBarScoreWidth:GetValue(req).Value
+        local score_X_Offset = InBarScore_X_Offset:GetValue(req).Value
+        local team_text_xpos = InBarText_X_Offset:GetValue(req).Value
+        local _text_ypos = InBarText_Y_Offset:GetValue(req).Value --0.0075
+        local roundCorners = 0.001
+        local shearCorners = 0.0 --0.40
+        local shadow = { 0.004, -0.005 }
+        local rows = 1
+        local columns = 7
+        local space = InBarSpacer:GetValue(req).Value
+        local index = 1
+        local sh = Shape()
+        local startAt = 6
+        local startCSV = 13
+        local _teamplayers_Y_Offset = -0.015
+        local _player_Image_grp = {}
+        local _player_Image_bg = createBar(_fla_I_Width, _fla_I_Height, 0.01, 0)
+        local _player_Image_shd = _player_Image_bg
+        local _player_Image_name = createText(tbl_B[4], 1, fontsize_5a, font_5, style_5, char_spacing5)
+        mat:Identity()
+        mat:Move(0, _fla_T_YOffset, 1.0)
+        _player_Image_name = _player_Image_name:TransformOfShape(mat)
+        mat:Identity()
+        mat:Move(shadow[1], shadow[2], 1.0)
+        _player_Image_shd = _player_Image_shd:TransformOfShape(mat)
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        _player_Image_shd = _player_Image_shd:TransformOfShape(mat)
+        _player_Image_bg = _player_Image_bg:TransformOfShape(mat)
+        _player_Image_grp = { sh, _player_Image_shd, _player_Image_bg, _player_Image_name }
+        mat:Identity()
+        mat:Scale(tbl_A[startAt + 12][1][3], tbl_A[startAt + 12][1][4], 1.0)
+        mat:Move(tbl_A[startAt + 12][1][1], 0.07 - tbl_A[startAt + 12][1][2], 1.0)
+        mat:Move(_fla_I_XOffset + _fla_G_XOffset, _fla_I_YOffset, 1.0)
+        for i = 1, #_player_Image_grp do
+            _player_Image_grp[i] = _player_Image_grp[i]:TransformOfShape(mat)
+        end
+        -- ---------------------------------------------------------------Overlays
+        local _fla_OI_grp = {}
+        local _fla_OI_bg = createBar(_fla_OI_A_Width, _fla_OI_A_Height, 0.01, 0)
+        local _fla_OI_num_bg = createBar(_fla_OI_B_Width, _fla_OI_B_Height, 0.01, 0)
+        local _fla_OI_num = createText(tbl_B[startCSV + (2 * 1)], 1, fontsize_5b, font_5, style_5, char_spacing5)
+        mat:Identity()
+        mat:Move(_fla_OI_B_XOffset - _fla_OI_T_XOffset,
+            _fla_OI_B_YOffset - _fla_OI_T_YOffset, 1.0)
+        _fla_OI_num = _fla_OI_num:TransformOfShape(mat)
+        mat:Identity()
+        mat:Move(_fla_OI_B_XOffset, _fla_OI_B_YOffset, 1.0)
+        _fla_OI_num_bg = _fla_OI_num_bg:TransformOfShape(mat)
+        mat:Identity()
+        mat:Move(_fla_OI_A_XOffset, _fla_OI_A_YOffset, 1.0)
+        _fla_OI_bg = _fla_OI_bg:TransformOfShape(mat)
+        _fla_OI_grp = { sh, _fla_OI_num_bg, _fla_OI_bg, _fla_OI_num }
+        mat:Identity()
+        mat:Scale(tbl_A[startAt + 12][1][3], tbl_A[startAt + 12][1][4], 1.0)
+        mat:Move(tbl_A[startAt + 12][1][1], 0.07 - tbl_A[startAt + 12][1][2], 1.0)
+        mat:Move(_fla_I_XOffset + _fla_G_XOffset, _fla_I_YOffset, 1.0)
+        for i = 1, #_fla_OI_grp do
+            _fla_OI_grp[i] = _fla_OI_grp[i]:TransformOfShape(mat)
+        end
+        -- ---------------------------------------------------------------
+        for j = 1, columns do
+            if j >= from and j <= to then
+                isHightlighted = "true"
+            else
+                isHightlighted = "false"
+            end
+            local _leftBar_bg = createBar(_fla_G_Width, _fla_G_Height, roundCorners, shearCorners)
+            local _leftBar_shd = _leftBar_bg
+            local _leftBar = createText(tbl_B[startCSV + (2 * j) + 1], 0, fontsize_5a, font_5, style_5,
+                char_spacing5)
+            mat:Identity()
+            mat:Move((-_fla_G_Width) + _fla_T_XOffset, _fla_T_YOffset, 1.0)
+            _leftBar = _leftBar:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(shadow[1], shadow[2], 1.0)
+            _leftBar_shd = _leftBar_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move((-_fla_G_Width) + _fla_L_XOffset, 0.0, 1.0)
+            mat:Move(_fla_G_XOffset, 0, 1.0)
+            _leftBar:TransformOfShape(mat)
+            _leftBar_shd = _leftBar_shd:TransformOfShape(mat)
+            _leftBar_bg = _leftBar_bg:TransformOfShape(mat)
+            _leftBar = _leftBar:TransformOfShape(mat)
+            local _leftBar_grp = { sh, _leftBar_shd, _leftBar_bg, _leftBar }
+            -- --------------------------------------------
+            local _rightBar_bg = createBar(_fla_G_Width, _fla_G_Height, roundCorners, shearCorners)
+            local _rightBar_shd = _rightBar_bg
+            local _rightBar = createText(tbl_B[startCSV + (2 * j) + 1], 0, fontsize_5a, font_5, style_5, char_spacing5)
+            mat:Identity()
+            mat:Move((-_fla_G_Width) + _fla_T_XOffset, _fla_T_YOffset, 1.0)
+            _rightBar = _rightBar:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(shadow[1], shadow[2], 1.0)
+            _rightBar_shd = _rightBar_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move((_fla_G_Width) + _fla_R_XOffset, 0.0, 1.0)
+            mat:Move(_fla_G_XOffset, 0, 1.0)
+            _rightBar_shd = _rightBar_shd:TransformOfShape(mat)
+            _rightBar_bg = _rightBar_bg:TransformOfShape(mat)
+            _rightBar = _rightBar:TransformOfShape(mat)
+            local _rightBar_grp = { sh, _rightBar_shd, _rightBar_bg, _rightBar }
+            -- --------------------------------------------
+            mat:Identity()
+            mat:Scale(tbl_A[startAt + j][1][3], tbl_A[startAt + j][1][4], 1.0)
+            mat:Move(tbl_A[startAt + j][1][1], -(_fla_G_Spacer * (index - 1) + tbl_A[startAt + j][1][2]), 1.0)
+
+            for i = 1, #_leftBar_grp do
+                _leftBar_grp[i] = _leftBar_grp[i]:TransformOfShape(mat)
+                _rightBar_grp[i] = _rightBar_grp[i]:TransformOfShape(mat)
+            end
+            table.insert(fact_list_card_A_tbl, index, {
+                {
+                    { _rightBar_grp, layer = 4 },
+                    { _leftBar_grp,  layer = 4 } },
+                selected = isHightlighted
+            })
+            index = index + 1
+        end
+        table.insert(fact_list_card_A_tbl, {
+            {
+                { _player_Image_grp, layer = 2 } },
+            selected = isHightlighted
+        })
+        table.insert(fact_list_card_A_tbl, {
+            {
+                { _fla_OI_grp, layer = 3 } },
+            selected = isHightlighted
+        })
+    end
+    --==========================================================================
+    -- create_Fact_list_card_B
+    --==========================================================================
+    local fact_list_card_B_tbl = {}
+    local function create_Fact_list_card_B()
+        local _flb_G_XOffset = _FLB_Global_XOffset:GetValue(req).Value
+        local _flb_H_Width = _FLB_Header_Width:GetValue(req).Value
+        local _flb_H_Height = _FLB_Header_Height:GetValue(req).Value
+        local _flb_H_Spacer = _FLB_Header_Spacer:GetValue(req).Value
+        local _flb_L_Width = _FLB_Left_Width:GetValue(req).Value
+        local _flb_G_Height = _FLB_Global_Height:GetValue(req).Value
+        local _flb_G_Spacer = _FLB_Global_Spacer:GetValue(req).Value
+        local _flb_T_XOffset = _FLB_InText_XOffset:GetValue(req).Value
+        local _flb_T_YOffset = _FLB_InText_YOffset:GetValue(req).Value
+        local _flb_R_Width = _FLB_Right_Width:GetValue(req).Value
+        local _flb_R_XOffset = _FLB_Right_XOffset:GetValue(req).Value
+        local _flb_R_YOffset = _FLB_Right_YOffset:GetValue(req).Value
+        local _flb_I_Width = _FLB_Image_Width:GetValue(req).Value
+        local _flb_I_Height = _FLB_Image_Height:GetValue(req).Value
+        local _flb_I_XOffset = _FLB_Image_XOffset:GetValue(req).Value
+        local _flb_I_YOffset = _FLB_Image_YOffset:GetValue(req).Value
+        local _flb_OI_A_Width = _FLB_OverlayIcon_A_Width:GetValue(req).Value
+        local _flb_OI_A_Height = _FLB_OverlayIcon_A_Height:GetValue(req).Value
+        local _flb_OI_A_XOffset = _FLB_OverlayIcon_A_XOffset:GetValue(req).Value
+        local _flb_OI_A_YOffset = _FLB_OverlayIcon_A_YOffset:GetValue(req).Value
+        local _flb_OI_B_Width = _FLB_OverlayIcon_B_Width:GetValue(req).Value
+        local _flb_OI_B_Height = _FLB_OverlayIcon_B_Height:GetValue(req).Value
+        local _flb_OI_B_XOffset = _FLB_OverlayIcon_B_XOffset:GetValue(req).Value
+        local _flb_OI_B_YOffset = _FLB_OverlayIcon_B_YOffset:GetValue(req).Value
+        local _flb_OI_T_XOffset = _FLB_OverlayIcon_Text_XOffset:GetValue(req).Value
+        local _flb_OI_T_YOffset = _FLB_OverlayIcon_Text_YOffset:GetValue(req).Value
+        local tbl_A = InScriptVal1:GetValue(req):GetValue()
+        local tbl_B = InScriptVal2:GetValue(req):GetValue()
+        local from = InFrom:GetValue(req).Value
+        local to = InTo:GetValue(req).Value
+        local step = InStep:GetValue(req).Value
+        local isHightlighted = "false"
+        local mat = Matrix4()
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        local _text_ypos = -0.0075
+        local roundCorners = 0.001
+        local shearCorners = 0.0 --0.40
+        local shadow = { 0.004, -0.005 }
+        local topleft = { -0.13, 0.16 }
+        local rows = 1
+        local columns = 7
+        local index = 1
+        local sh = Shape()
+        local startAt = 6
+        local startCSV = 13
+        local _flb_I_grp = {}
+        local _flb_I_bg = createBar(_flb_I_Width, _flb_I_Height, 0.01, 0)
+        local _flb_I_shd = _flb_I_bg
+        local _flb_I_name = createText(tbl_B[4], 1, fontsize_5a, font_5, style_5, char_spacing5)
+        mat:Identity()
+        mat:Move(0, _flb_T_YOffset, 1.0)
+        _flb_I_name = _flb_I_name:TransformOfShape(mat)
+        mat:Identity()
+        mat:Move(shadow[1], shadow[2], 1.0)
+        _flb_I_shd = _flb_I_shd:TransformOfShape(mat)
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        _flb_I_shd = _flb_I_shd:TransformOfShape(mat)
+        _flb_I_bg = _flb_I_bg:TransformOfShape(mat)
+        _flb_I_grp = { sh, _flb_I_shd, _flb_I_bg, _flb_I_name }
+        mat:Identity()
+        mat:Scale(tbl_A[startAt + 12][1][3], tbl_A[startAt + 12][1][4], 1.0)
+        mat:Move(tbl_A[startAt + 12][1][1], 0.07 - tbl_A[startAt + 12][1][2], 1.0)
+        mat:Move(_flb_I_XOffset + _flb_G_XOffset, _flb_I_YOffset, 1.0)
+        for i = 1, #_flb_I_grp do
+            _flb_I_grp[i] = _flb_I_grp[i]:TransformOfShape(mat)
+        end
+        -- ---------------------------------------------------------------Overlays
+        local _flb_OI_grp = {}
+        local _flb_OI_bg = createBar(_flb_OI_A_Width, _flb_OI_A_Height, 0.01, 0)
+        local _flb_OI_num_bg = createBar(_flb_OI_B_Width, _flb_OI_B_Height, 0.01, 0)
+        local _flb_OI_num = createText(tbl_B[startCSV + (2 * 1)], 1, fontsize_5b, font_5, style_5, char_spacing5)
+        mat:Identity()
+        mat:Move(_flb_OI_B_XOffset - _flb_OI_T_XOffset,
+            _flb_OI_B_YOffset - _flb_OI_T_YOffset, 1.0)
+        _flb_OI_num = _flb_OI_num:TransformOfShape(mat)
+        mat:Identity()
+        mat:Move(_flb_OI_B_XOffset, _flb_OI_B_YOffset, 1.0)
+        _flb_OI_num_bg = _flb_OI_num_bg:TransformOfShape(mat)
+        mat:Identity()
+        mat:Move(_flb_OI_A_XOffset, _flb_OI_A_YOffset, 1.0)
+        _flb_OI_bg = _flb_OI_bg:TransformOfShape(mat)
+        _flb_OI_grp = { sh, _flb_OI_num_bg, _flb_OI_bg, _flb_OI_num }
+        mat:Identity()
+        mat:Scale(tbl_A[startAt + 12][1][3], tbl_A[startAt + 12][1][4], 1.0)
+        mat:Move(tbl_A[startAt + 12][1][1], 0.07 - tbl_A[startAt + 12][1][2], 1.0)
+        mat:Move(_flb_I_XOffset + _flb_G_XOffset, _flb_I_YOffset, 1.0)
+        for i = 1, #_flb_OI_grp do
+            _flb_OI_grp[i] = _flb_OI_grp[i]:TransformOfShape(mat)
+        end
+        -- ---------------------------------------------------------------
+        for j = 1, columns do
+            if j >= from and j <= to then
+                isHightlighted = "true"
+            else
+                isHightlighted = "false"
+            end
+            -- --------------------------------------------
+            local _rightBar_bg = createBar(_flb_R_Width, _flb_G_Height, roundCorners, shearCorners)
+            local _rightBar_shd = _rightBar_bg
+            local _rightBar = createText(tbl_B[startCSV + (2 * j) + 1], 0, fontsize_5a, font_5, style_5, char_spacing5)
+            mat:Identity()
+            mat:Move((-_flb_R_Width) + _flb_T_XOffset, _flb_T_YOffset, 1.0)
+            _rightBar = _rightBar:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(shadow[1], shadow[2], 1.0)
+            _rightBar_shd = _rightBar_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(((_flb_R_Width * 2) / 2) + _flb_R_XOffset + _flb_G_XOffset, _flb_R_YOffset, 1.0)
+            _rightBar_shd = _rightBar_shd:TransformOfShape(mat)
+            _rightBar_bg = _rightBar_bg:TransformOfShape(mat)
+            _rightBar = _rightBar:TransformOfShape(mat)
+            local _rightBar_grp = { sh, _rightBar_shd, _rightBar_bg, _rightBar }
+            -- --------------------------------------------
+            mat:Identity()
+            mat:Scale(tbl_A[startAt + j][1][3], tbl_A[startAt + j][1][4], 1.0)
+            mat:Move(tbl_A[startAt + j][1][1], -(_flb_G_Spacer * (index - 1) + tbl_A[startAt + j][1][2]), 1.0)
+            for i = 1, #_rightBar_grp do
+                _rightBar_grp[i] = _rightBar_grp[i]:TransformOfShape(mat)
+            end
+            table.insert(fact_list_card_B_tbl, index, {
+                {
+                    { _rightBar_grp, layer = 4 },
+                },
+                selected = isHightlighted
+            })
+            index = index + 1
+        end
+        table.insert(fact_list_card_B_tbl, {
+            {
+                { _flb_I_grp, layer = 2 } },
+            selected = isHightlighted
+        })
+        table.insert(fact_list_card_B_tbl, {
+            {
+                { _flb_OI_grp, layer = 3 } },
+            selected = isHightlighted
+        })
+    end
+
+    --==========================================================================
+    -- create_Teamplayers
+    --==========================================================================
+    local teamplayers_tbl = {}
+local function create_Teamplayers()
+
+
+
+        local _evt_TP_HT_XOffset=_EVT_TeamP_H_Text_XOffset:GetValue(req).Value
+        local _evt_TP_HT_YOffset=_EVT_TeamP_H_Text_YOffset:GetValue(req).Value
+
+
+        local _evt_TP_ST_XOffset=_EVT_TeamP_SubH_Text_XOffset:GetValue(req).Value
+        local _evt_TP_ST_YOffset=_EVT_TeamP_SubH_Text_YOffset:GetValue(req).Value
+
+        local _evt_TP_L_Width=_EVT_TeamP_Left_Width:GetValue(req).Value
+        local _evt_TP_L_XOffset=_EVT_TeamP_Left_XOffset:GetValue(req).Value
+        local _evt_TP_L_YOffset=_EVT_TeamP_Left_YOffset:GetValue(req).Value
+
+
+        local _evt_TP_LT_XOffset=_EVT_TeamP_Left_Text_XOffset:GetValue(req).Value
+        local _evt_TP_LT_YOffset=_EVT_TeamP_Left_Text_YOffset:GetValue(req).Value
+
+        local _evt_TP_R_Width=_EVT_TeamP_Right_Width:GetValue(req).Value
+        local _evt_TP_R_XOffset=_EVT_TeamP_Right_XOffset:GetValue(req).Value
+        local _evt_TP_R_YOffset=_EVT_TeamP_Right_YOffset:GetValue(req).Value
+
+
+
+        local _evt_TP_RT_XOffset=_EVT_TeamP_Right_Text_XOffset:GetValue(req).Value
+        local _evt_TP_RT_YOffset=_EVT_TeamP_Right_Text_YOffset:GetValue(req).Value
+
+
+
+
+
+
+
+
+        local tbl_A = InScriptVal1:GetValue(req):GetValue()
+        local tbl_B = InScriptVal2:GetValue(req):GetValue()
+        local from = InFrom:GetValue(req).Value
+        local to = InTo:GetValue(req).Value
+        local step = InStep:GetValue(req).Value
+        local mat = Matrix4()
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        local bar_height = InBarHeight:GetValue(req).Value
+        local bar_width = InBarScoreWidth:GetValue(req).Value
+        local num_Bar_width = InBarScoreWidth:GetValue(req).Value
+        local score_X_Offset = InBarScore_X_Offset:GetValue(req).Value
+        local team_Bar_width = InBarNameWidth:GetValue(req).Value
+        local team_text_xpos = InBarText_X_Offset:GetValue(req).Value
+        local team_text_ypos = -0.006
+        -- new settings
+        local _text_ypos = InBarText_Y_Offset:GetValue(req).Value 
+        local roundCorners = 0.001
+        local shearCorners = 0.40
+        local shadow = { 0.004, -0.005 }
+        local rows = 1
+        local columns = 11
+        local space = InBarSpacer:GetValue(req).Value
+        local index = 1
+        local sh = Shape()
+        local startAt = 6
+        local startCSV = 13
+
+       local team_headline_xpos = _team_Headlines_XOffset:GetValue(req).Value
+       local team_headline_ypos = _team_Headlines_YOffset:GetValue(req).Value
+        -- local _teamplayers_Y_Offset = 0.05 --0.015
+        local _teamplayers_Y_Offset = -0.26
+        local isHightlighted = "false"
+        local _event_headline_text = createText("STARTING XI", 1, fontsize_7, font_7, style_7, char_spacing7)
+        local _event_subheadline_text = createText("Modulo: " .. tbl_B[63], 1, fontsize_8, font_8, style_8, char_spacing8)
+
+        mat:Identity()
+        mat:RotZ(90)
+        mat:Move(0, 0, 1.0)
+        _event_headline_text = _event_headline_text:TransformOfShape(mat)
+        _event_headline_text = _event_headline_text:OutlineOfShape(0.003, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+
+        mat:Identity()
+        mat:RotZ(90)
+        mat:Move(0, 0, 1.0)
+        _event_subheadline_text = _event_subheadline_text:TransformOfShape(mat)
+
+        -- animation --
+        mat:Identity()
+        mat:Scale(tbl_A[startAt + 13][1][3], tbl_A[startAt + 13][1][4], 1.0)
+        mat:Move(-0.273 + tbl_A[startAt + 13][1][1], tbl_A[startAt + 13][1][2], 1.0)
+        mat:Move(team_headline_xpos+_team_G_XOffset, team_headline_ypos+_team_G_YOffset, 1.0)
+        _event_subheadline_text = _event_subheadline_text:TransformOfShape(mat)
+
+        mat:Identity()
+        mat:Scale(tbl_A[startAt + 14][1][3], tbl_A[startAt + 14][1][4], 1.0)
+        mat:Move(-0.332 + tbl_A[startAt + 14][1][1], tbl_A[startAt + 14][1][2], 1.0)
+        mat:Move(team_headline_xpos+_team_G_XOffset, team_headline_ypos+_team_G_YOffset, 1.0)
+        _event_headline_text = _event_headline_text:TransformOfShape(mat)
+
+
+
+
+
+
+
+       -- local _trainer_title_ypos = -0.612
+      --  local _trainer_title_xpos = -0.245
+        local _trainer_title_bg = createBar(0.088, bar_height, roundCorners, 0.40)
+        local _trainer_title_shd = _trainer_title_bg
+        local _trainer_title = createText("ALLENATORE", 1, fontsize_5a, font_5, style_5, char_spacing5)
+        local _trainer_grp = {}
+
+        mat:Identity()
+        mat:Move(0.0, -0.007, 1.0)
+        _trainer_title = _trainer_title:TransformOfShape(mat)
+
+        mat:Identity()
+        mat:Move(shadow[1], shadow[2], 1.0)
+        _trainer_title_shd = _trainer_title_shd:TransformOfShape(mat)
+
+        mat:Identity()
+
+
+          mat:Move((((-team_Bar_width * 2) / 2)-0.016) - score_X_Offset , 0, 1.0)
+
+        _trainer_title_shd = _trainer_title_shd:TransformOfShape(mat)
+        _trainer_title_bg = _trainer_title_bg:TransformOfShape(mat)
+        _trainer_title = _trainer_title:TransformOfShape(mat)
+
+ 
+
+
+
+        _trainer_grp = { sh, _trainer_title_shd, _trainer_title_bg, _trainer_title }
+
+        local _team_trainer_grp = {}
+        local _team_trainer_bg = createBar(team_Bar_width, bar_height, roundCorners, 0.40)
+        local _team_trainer_shd = _team_trainer_bg
+        local _team_trainer_name = createText("Sig. " .. tbl_B[14], 0, fontsize_5a, font_5, style_5, char_spacing5)
+
+        mat:Identity()
+      
+       
+        mat:Move((-team_Bar_width) + team_text_xpos , _text_ypos, 1.0)
+        _team_trainer_name = _team_trainer_name:TransformOfShape(mat)
+
+        mat:Identity()
+        mat:Move(shadow[1], shadow[2], 1.0)
+        _team_trainer_shd = _team_trainer_shd:TransformOfShape(mat)
+
+        mat:Identity()
+      
+       -- mat:Move(_team_G_XOffset, _team_G_YOffset, 1.0)
+      mat:Move(0.0705, 0, 1.0)
+        _team_trainer_shd = _team_trainer_shd:TransformOfShape(mat)
+        _team_trainer_bg = _team_trainer_bg:TransformOfShape(mat)
+       _team_trainer_name = _team_trainer_name:TransformOfShape(mat)
+
+        _team_trainer_grp = { sh, _team_trainer_shd, _team_trainer_bg, _team_trainer_name }
+
+        mat:Identity()
+        
+        
+        mat:Scale(tbl_A[startAt + 12][1][3], tbl_A[startAt + 12][1][4], 1.0)
+        mat:Move(tbl_A[startAt + 12][1][1],  tbl_A[startAt + 12][1][2], 1.0)
+       -- mat:Move(_team_G_XOffset, _teamplayers_Y_Offset+_team_G_YOffset, 1.0)
+         mat:Move(-0.078+_team_G_XOffset,-0.535+ _team_G_YOffset, 1.0)
+
+        for i = 1, #_team_trainer_grp do
+            _team_trainer_grp[i] = _team_trainer_grp[i]:TransformOfShape(mat)
+            _trainer_grp[i] = _trainer_grp[i]:TransformOfShape(mat)
+        end
+--(0.612) -
+--0.075
+
+local checkthis =0
+
+
+        for j = 1, columns do
+            if j >= from and j <= to then
+                isHightlighted = "true"
+            else
+                isHightlighted = "false"
+            end
+            local _mainBG_items = Shape()
+            local _mainText_items = Shape()
+            local _num_bg = createBar(num_Bar_width, bar_height, roundCorners, shearCorners)
+            local _num_shd = _num_bg
+            local _num = createText(tbl_B[startCSV + (2 * j)], 1, fontsize_5a, font_5, style_5, char_spacing5)
+
+            mat:Identity()
+            mat:Move(0, _text_ypos, 1.0)
+            _num = _num:TransformOfShape(mat)
+
+            mat:Identity()
+            mat:Move(shadow[1], shadow[2], 1.0)
+            _num_shd = _num_shd:TransformOfShape(mat)
+
+            mat:Identity()
+            --mat:Move(((team_Bar_width * 2) / 2) + num_Bar_width + score_X_Offset + checkthis, 0.0, 1.0)
+            mat:Move((((-team_Bar_width * 2) / 2)-num_Bar_width) - score_X_Offset  , 0.0, 1.0)
+            _num_shd = _num_shd:TransformOfShape(mat)
+            _num_bg = _num_bg:TransformOfShape(mat)
+            _num = _num:TransformOfShape(mat)
+
+            local _num_grp = { sh, _num_shd, _num_bg, _num }
+
+            -- --------------------------------------------
+            local _team_bg = createBar(team_Bar_width, bar_height, roundCorners, shearCorners)
+            local _team_shd = _team_bg
+            local _team_player_name = createText(tbl_B[startCSV + (2 * j) + 1], 0, fontsize_5a, font_5, style_5,
+                char_spacing5)
+
+            mat:Identity()
+            mat:Move((-team_Bar_width) + team_text_xpos + checkthis, _text_ypos, 1.0)
+            _team_player_name = _team_player_name:TransformOfShape(mat)
+
+            mat:Identity()
+            mat:Move(shadow[1], shadow[2], 1.0)
+            _team_shd = _team_shd:TransformOfShape(mat)
+
+            mat:Identity()
+            mat:Move(checkthis, 0, 1.0)
+            _team_shd = _team_shd:TransformOfShape(mat)
+            _team_bg = _team_bg:TransformOfShape(mat)
+
+            local _team = {}
+            local _team_grp = { sh, _team_shd, _team_bg, _team_player_name }
+
+            mat:Identity()
+            mat:Scale(tbl_A[startAt + j][1][3], tbl_A[startAt + j][1][4], 1.0)
+            mat:Move(tbl_A[startAt + j][1][1], -(space * (index - 1) + tbl_A[startAt + j][1][2]), 1.0)
+           -- mat:Move(checkthis, _teamplayers_Y_Offset, 1.0)
+
+            mat:Move(_team_G_XOffset, _team_G_YOffset, 1.0)
+            
+            for i = 1, #_team_grp do
+                _team_grp[i] = _team_grp[i]:TransformOfShape(mat)
+                _num_grp[i] = _num_grp[i]:TransformOfShape(mat)
+            end
+            table.insert(teamplayers_tbl, index, {
+                {
+                    { _num_grp,  layer = 3 },
+                    { _team_grp, layer = 4 } },
+                selected = isHightlighted
+            })
+            index = index + 1
+        end
+        table.insert(teamplayers_tbl, index, {
+            {
+                { _team_trainer_grp,                       layer = 3 },
+                { _trainer_grp,                            layer = 4 },
+                { { sh, sh, sh, _event_headline_text },    layer = 4 },
+                { { sh, sh, sh, _event_subheadline_text }, layer = 4 },
+            },
+            selected = isHightlighted
+        })
+end
+
+
+    --------------------------------------------------------------
+    --==========================================================================
+    --------------------------------------------------------------
+    -- create_Subplayers
+    --==========================================================================
+    local subplayers_tbl = {}
+local function create_Subplayers()
+        local tbl_A = InScriptVal1:GetValue(req):GetValue()
+        local tbl_B = InScriptVal2:GetValue(req):GetValue()
+        local from = InFrom:GetValue(req).Value
+        local to = InTo:GetValue(req).Value
+        local step = InStep:GetValue(req).Value
+        local sh = Shape()
+        local mat = Matrix4()
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        local bar_width = 0.02
+        local bar_height = 0.0188
+        local gap = 0.13
+        local roundCorners = 0.001
+        local team_Bar_width = 0.227
+        local team_text_xpos = -0.031
+        local team_text_ypos = -0.006
+        local num_ypos = -0.0075
+        local rows = 1
+        local columns_L = 4
+        local columns_R = 5
+        local space = 0.0415
+        local index = 1
+        local player_num = 12
+        local startAt = 1
+        local startCSV = 13
+        local isHightlighted = "false"
+        local team_left_xpos = 0.0
+
+
+
+        local _posX_Offset = _team_SubP_XOffset:GetValue(req).Value --0.57
+        local _posY_Offset = _team_SubP_YOffset:GetValue(req).Value --0.57
+
+        local _subP_Scale = _team_SubP_Scale:GetValue(req).Value
+
+
+
+        local _event_headline_text = createText("A DISPOSIZIONE", 1, fontsize_6, font_6, style_6, char_spacing6)
+        mat:Identity()
+        mat:Move(0, 0, 1.0)
+        _event_headline_text = _event_headline_text:TransformOfShape(mat)
+        _event_headline_text = _event_headline_text:OutlineOfShape(0.001, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+        mat:Identity()
+        mat:Scale(tbl_A[startAt][1][3], tbl_A[startAt][1][4], 1.0)
+        mat:Move(-0.21 + tbl_A[startAt][1][1], 0.04 - tbl_A[startAt][1][2] - 0.215, 1.0)
+
+        mat:Move(_posX_Offset, _posY_Offset, 1.0)
+
+        mat:Move(_team_G_XOffset, _team_G_YOffset, 1.0)
+
+        _event_headline_text = _event_headline_text:TransformOfShape(mat)
+        for j = 1, columns_L do
+            if j >= from and j <= to then
+                isHightlighted = "true"
+            else
+                isHightlighted = "false"
+            end
+            local _mainBG_items = Shape()
+            local _mainText_items = Shape()
+            local _num_bg = createBar(bar_width + 0.02, bar_height, roundCorners, 0.40)
+            local _num_shd = _num_bg
+            local _num = createText(tbl_B[startCSV + (2 * player_num)], 1, fontsize_5b, font_5, style_5, char_spacing5)
+            mat:Identity()
+            mat:Move(0.004, -0.005, 1.0)
+            _num_shd = _num_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(0, 0, 1.0)
+            _num_bg = _num_bg:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(0, num_ypos, 1.0)
+            _num = _num:TransformOfShape(mat)
+
+            mat:Identity()
+            mat:Scale(_subP_Scale, _subP_Scale, 1.0)
+
+            mat:Move(-0.21, 0, 1.0)
+            _num_shd = _num_shd:TransformOfShape(mat)
+            _num_bg = _num_bg:TransformOfShape(mat)
+            _num = _num:TransformOfShape(mat)
+            local _num_grp = { sh, _num_shd, _num_bg, _num }
+            local _team_A_bg = createBar(team_Bar_width - 0.013, bar_height, roundCorners, 0.40)
+            local _team_A_shd = _team_A_bg
+            local _team_A_player_name = createText(tbl_B[startCSV + (2 * player_num) + 1], 0, fontsize_5b, font_5,
+                style_5, char_spacing5)
+            mat:Identity()
+            mat:Move(0.004, -0.005, 1.0)
+            _team_A_shd = _team_A_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(-0.13, team_text_ypos + 0.001, 1.0)
+            _team_A_player_name = _team_A_player_name:TransformOfShape(mat)
+
+            mat:Identity()
+            mat:Scale(_subP_Scale, _subP_Scale, 1.0)
+            mat:Move(0, 0, 1.0)
+            _team_A_shd = _team_A_shd:TransformOfShape(mat)
+            _team_A_bg = _team_A_bg:TransformOfShape(mat)
+            local _team_grp = { sh, _team_A_shd, _team_A_bg, _team_A_player_name }
+            mat:Identity()
+            mat:Scale(tbl_A[j + startAt + 1][1][3], tbl_A[j + startAt + 1][1][4], 1.0)
+            mat:Move(-0.177 + tbl_A[j + startAt + 1][1][1], -(space * (index - 1) + 0.207 + tbl_A[j + startAt + 1][1][2]),
+                1.0)
+            mat:Move(_posX_Offset, _posY_Offset, 1.0)
+
+            mat:Move(_team_G_XOffset, _team_G_YOffset, 1.0)
+
+
+            for i = 1, #_team_grp do
+                _team_grp[i] = _team_grp[i]:TransformOfShape(mat)
+                _num_grp[i] = _num_grp[i]:TransformOfShape(mat)
+            end
+            table.insert(subplayers_tbl, index, {
+                {
+                    { _num_grp,  layer = 3 },
+                    { _team_grp, layer = 4 } },
+                selected = isHightlighted
+            })
+            index = index + 1
+            player_num = player_num + 1
+        end
+        local team_right_xpos = 0.25
+        local team_right_ypos = 0.208
+        for z = 1, columns_R do
+            if z >= from and z <= to then
+                isHightlighted = "true"
+            else
+                isHightlighted = "false"
+            end
+            local _mainBG_items = Shape()
+            local _mainText_items = Shape()
+            local _num_bg = createBar(bar_width + 0.02, bar_height, roundCorners, 0.40)
+            local _num_shd = _num_bg
+            local _num = createText(tbl_B[startCSV + (2 * player_num)], 1, fontsize_5b, font_5, style_5, char_spacing5)
+            mat:Identity()
+            mat:Move(0.004, -0.005, 1.0)
+            _num_shd = _num_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(0, 0, 1.0)
+            _num_bg = _num_bg:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(0, num_ypos, 1.0)
+            _num = _num:TransformOfShape(mat)
+
+            mat:Identity()
+           mat:Scale(_subP_Scale, _subP_Scale, 1.0)
+            mat:Move(-0.21, 0, 1.0)
+            _num_shd = _num_shd:TransformOfShape(mat)
+            _num_bg = _num_bg:TransformOfShape(mat)
+            _num = _num:TransformOfShape(mat)
+            local _num_grp = { sh, _num_shd, _num_bg, _num }
+            local _team_A_bg = createBar(team_Bar_width - 0.013, bar_height, roundCorners, 0.40)
+            local _team_A_shd = _team_A_bg
+            local _team_A_player_name = createText(tbl_B[startCSV + (2 * player_num) + 1], 0, fontsize_5b, font_5,
+                style_5, char_spacing5)
+            mat:Identity()
+            mat:Move(0.004, -0.005, 1.0)
+            _team_A_shd = _team_A_shd:TransformOfShape(mat)
+            mat:Identity()
+            mat:Move(-0.13, team_text_ypos + 0.001, 1.0)
+            _team_A_player_name = _team_A_player_name:TransformOfShape(mat)
+
+            mat:Identity()
+            mat:Scale(_subP_Scale, _subP_Scale, 1.0)
+            mat:Move(0, 0, 1.0)
+            _team_A_shd = _team_A_shd:TransformOfShape(mat)
+            _team_A_bg = _team_A_bg:TransformOfShape(mat)
+            local _team_grp = { sh, _team_A_shd, _team_A_bg, _team_A_player_name }
+            mat:Identity()
+            mat:Scale(tbl_A[z + startAt + 5][1][3], tbl_A[z + startAt + 5][1][4], 1.0)
+            mat:Move(team_right_xpos + tbl_A[z + startAt + 5][1][1],
+                -(space * (index - 1) - 0.007 + tbl_A[z + startAt + 5][1][2]), 1.0)
+
+
+            mat:Move(_posX_Offset, _posY_Offset, 1.0)
+
+            mat:Move(_team_G_XOffset, _team_G_YOffset, 1.0)
+
+            for i = 1, #_team_grp do
+                _team_grp[i] = _team_grp[i]:TransformOfShape(mat)
+                _num_grp[i] = _num_grp[i]:TransformOfShape(mat)
+            end
+            table.insert(subplayers_tbl, index, {
+                {
+                    { _num_grp,  layer = 3 },
+                    { _team_grp, layer = 4 } },
+                selected = isHightlighted
+            })
+            index = index + 1
+            player_num = player_num + 1
+        end
+        local _subheadline_grp = { sh, sh, sh, _event_headline_text }
+        table.insert(subplayers_tbl, {
+            {
+                { _subheadline_grp, layer = 2 } },
+            selected = isHightlighted
+        })
+end
+    --==========================================================================
+    create_Images()
+    create_Header()
+    create_Subheader()
+    create_Teamplayers()
+    create_Subplayers()
+    create_Score_list_A()
+    create_Score_list_B()
+    create_Fact_list_card_A()
+    create_Fact_list_card_B()
+
+
+print(InObjectType:GetValue(req).Value)
+local show_Section = InObjectType:GetValue(req).Value
+local _MainGrp = {}
+
+if show_Section == 0 then
+
+    
+    _MainGrp[1] = extend(header_tbl, subheader_tbl)
+    _MainGrp[1] = extend(_MainGrp[1], teamplayers_tbl)
+    _MainGrp[1] = extend(_MainGrp[1], subplayers_tbl)
+    _MainGrp[2] = shape_texture
+
+end
+if show_Section == 1 then
+
+ _MainGrp[1] = score_list_A_tbl 
+
+end
+if show_Section == 2 then
+
+_MainGrp[1] = score_list_B_tbl
+end
+if show_Section == 3 then
+
+    _MainGrp[1] = fact_list_card_A_tbl
+
+end
+if show_Section == 4 then
+
+    _MainGrp[1] = fact_list_card_B_tbl
+
+end
+
+
+
+
+    --   _MainGrp[1] =  fact_list_card_B_tbl  -- DONE
+    --   _MainGrp[1] = fact_list_card_A_tbl   -- DONE
+    --   _MainGrp[1] = score_list_B_tbl --DONE
+    --   _MainGrp[1] = score_list_A_tbl --DONE
+    --   _MainGrp[1] = teamplayers_tbl -- Check DONE 90%
+    --   _MainGrp[1] = teamplayers_tbl_02 -- CHECK DONE
+    --   _MainGrp[1] = subplayers_tbl -- DONE
+
+    OutScriptVal:Set(req, ScriptValParam(_MainGrp))
+end

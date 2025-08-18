@@ -1,0 +1,484 @@
+-- modules
+-- ============================================================================
+local utf8 = require("utf8")
+local chance = require("chance")
+-- ============================================================================
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass("LetterDotPacker", CT_Tool, {
+  REGS_Name          = "LetterDotPacker_3Multi",
+  REGS_Category      = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_OpIconString  = "LTPv1",
+  REGS_OpDescription = "Fills a letter shape with packed text using FitTo and custom input"
+})
+
+function Create()
+  InGlobalScale      = self:AddInput("GlobalScale", "globalScale", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.1,
+    INP_MinScale = 0.01,
+    INP_MaxScale = 1,
+  })
+  NumRects           = self:AddInput("Number of Rectangles", "NumRects", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 1,
+    INP_MaxScale = 1000,
+    INP_Default = 100,
+    INP_Integer = true,
+  })
+  InThickness        = self:AddInput("Thickness", "Thickness", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_MinScale = 0.0,
+    INP_MaxScale = 0.1,
+    INP_Default = 0.005,
+  })
+  InHori_adjustment  = self:AddInput("Horizontal Adjustment", "Hori_adjustment", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = -1,
+    INP_MaxScale = 1,
+    INP_Default = 0.0,
+    PC_ControlGroup = 1,
+    PC_ControlID = 3,
+  })
+  InVer_adjustment   = self:AddInput("Vertical Adjustment", "Ver_adjustment", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = -1,
+    INP_MaxScale = 1,
+    INP_Default = 0,
+    PC_ControlGroup = 1,
+    PC_ControlID = 4,
+  })
+  GridSize           = self:AddInput("Grid Size", "GridSize", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 100,
+    INP_MinScale = 20,
+    INP_MaxScale = 200,
+    INP_Integer = true,
+  })
+  InResolution       = self:AddInput("Resolution", "Resolution", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 5,
+    INP_MinScale = 0.1,
+    INP_MaxScale = 10.0,
+    INP_Integer = false,
+  })
+  InCharacterSpacing = self:AddInput("Character Spacing", "CharacterSpacing", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Default = 0.05,
+    INP_Integer = false,
+  })
+  InLineSpacing      = self:AddInput("line Spacing", "lineSpacing", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Integer = false,
+  })
+  InFitScale         = self:AddInput("Fit Scale ", "FitScale", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "CheckboxControl",
+    INP_DoNotifyChanged = true,
+    INP_Integer = true,
+    INP_Default = 0,
+    ICD_Width = 1,
+  })
+  InR_bg             = self:AddInput("Red", "Red_bg ", {
+    ICS_Name           = "Color",
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 1.0,
+    INP_MaxScale       = 1.0,
+    CLRC_ShowWheel     = false,
+    IC_ControlGroup    = 4,
+    IC_ControlID       = 0,
+  })
+  InG_bg             = self:AddInput("Green", "Green_bg", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.9,
+    IC_ControlGroup    = 4,
+    IC_ControlID       = 1,
+  })
+  InB_bg             = self:AddInput("Blue", "Blue_bg", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.6,
+    IC_ControlGroup    = 4,
+    IC_ControlID       = 2,
+  })
+  InImage            = self:AddInput("Input", "Input", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+  InScriptValText    = self:AddInput("ScriptVal Text", "ScriptValtext", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 2,
+  })
+  InGroups           = self:AddInput("JSON Text Groups", "JSONTextGroups", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 3,
+  })
+  Output             = self:AddOutput("Output", "Output", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+end
+
+-- Utility: Normalize points to grid
+function normalize_points(points, grid_size)
+  local min_x, max_x = math.huge, -math.huge
+  local min_y, max_y = math.huge, -math.huge
+  for _, p in ipairs(points) do
+    min_x = math.min(min_x, p[1])
+    max_x = math.max(max_x, p[1])
+    min_y = math.min(min_y, p[2])
+    max_y = math.max(max_y, p[2])
+  end
+  local dx, dy = max_x - min_x, max_y - min_y
+  local norm = {}
+  for _, p in ipairs(points) do
+    local x = math.floor(((p[1] - min_x) / dx) * (grid_size - 1)) + 1
+    local y = math.floor(((p[2] - min_y) / dy) * (grid_size - 1)) + 1
+    table.insert(norm, { x = x, y = y })
+  end
+  return norm
+end
+
+-- ============================================================================
+-- =============3. Advanced Packing Algorithm==================================
+-- ============================================================================
+
+function can_fit(shape, x, y, w, h)
+  for dy = 0, h - 1 do
+    for dx = 0, w - 1 do
+      if not shape[y + dy] or not shape[y + dy][x + dx] then return false end
+    end
+  end
+  return true
+end
+
+function mark_used(shape, x, y, w, h)
+  for dy = 0, h - 1 do
+    for dx = 0, w - 1 do shape[y + dy][x + dx] = false end
+  end
+end
+
+-- Improved rectangle packing with better hole filling
+
+function pack_rectangles(shape, grid_size, count, detail)
+  local packed = {}
+  local attempts = {}
+
+  -- Use a fixed size for all rectangles (dots)
+  local base_w = math.max(1, math.floor(detail))
+  local base_h = math.max(1, math.floor(detail))
+
+  for i = 1, count do
+    table.insert(attempts, {
+      id = i,
+      w = base_w,
+      h = base_h,
+      priority = base_w * base_h,
+    })
+
+    -- Add smaller variants for hole filling
+    if base_w > 2 and base_h > 2 then
+      table.insert(attempts, {
+        id = i,
+        w = math.floor(base_w * 0.8),
+        h = math.floor(base_h * 0.8),
+        priority = (base_w * base_h) * 0.5,
+      })
+    end
+  end
+
+  -- Sort by priority (larger first, then smaller for hole filling)
+  table.sort(attempts, function(a, b) return a.priority > b.priority end)
+
+  local placed_ids = {}
+
+  for _, attempt in ipairs(attempts) do
+    if not placed_ids[attempt.id] then
+      local w, h = attempt.w, attempt.h
+
+      w = math.min(w, grid_size - 1)
+      h = math.min(h, grid_size - 1)
+      w = math.max(w, 1)
+      h = math.max(h, 1)
+
+      local best_fit = find_best_fit_position(shape, grid_size, w, h)
+
+      if best_fit then
+        local rectShape = Shape()
+        rectShape:AddRectangle(0, w, 0, h, 0, 8)
+
+        table.insert(packed, {
+          x = best_fit.x,
+          y = best_fit.y,
+          w = w,
+          h = h,
+          origW = w,
+          origH = h,
+          rotated = false,
+          rectShape = rectShape,
+        })
+
+        mark_used(shape, best_fit.x, best_fit.y, w, h)
+        placed_ids[attempt.id] = true
+      end
+    end
+  end
+
+  return packed
+end
+
+-- Find best position considering shape compactness
+function find_best_fit_position(shape, grid_size, w, h)
+  local best_pos = nil
+  local best_score = -1
+
+  for y = 1, grid_size - h do
+    for x = 1, grid_size - w do
+      if can_fit(shape, x, y, w, h) then
+        -- Calculate fitness score
+        local score = calculate_fit_score(shape, x, y, w, h, grid_size)
+
+        if score > best_score then
+          best_score = score
+          best_pos = { x = x, y = y }
+        end
+      end
+    end
+  end
+
+  return best_pos
+end
+
+-- Calculate how good a position is for reducing holes
+function calculate_fit_score(shape, x, y, w, h, grid_size)
+  local score = 0
+  local surrounding_area = 2
+
+  -- Check surrounding cells for existing content
+  for dy = -surrounding_area, h + surrounding_area do
+    for dx = -surrounding_area, w + surrounding_area do
+      local check_x = x + dx
+      local check_y = y + dy
+
+      if check_x >= 1 and check_x <= grid_size and
+          check_y >= 1 and check_y <= grid_size then
+        if shape[check_y] and not shape[check_y][check_x] then
+          local distance = math.sqrt(dx * dx + dy * dy)
+          score = score + (1.0 / (distance + 1))
+        end
+      end
+    end
+  end
+
+  -- Bonus for corner/edge positions
+  if x == 1 or y == 1 then score = score + 5 end
+  if x + w >= grid_size or y + h >= grid_size then score = score + 3 end
+
+  return score
+end
+
+function fill_polygon(norm_points, grid_size)
+  local shape = {}
+  for y = 1, grid_size do
+    shape[y] = {}
+    for x = 1, grid_size do
+      shape[y][x] = false
+    end
+  end
+
+  -- Use sub-pixel sampling for better edge detection
+  local samples_per_cell = 2 -- Reduced for performance
+
+  for y = 1, grid_size do
+    for x = 1, grid_size do
+      local inside_count = 0
+      local total_samples = samples_per_cell * samples_per_cell
+
+      for sy = 0, samples_per_cell - 1 do
+        for sx = 0, samples_per_cell - 1 do
+          local sample_x = x - 0.5 + (sx + 0.5) / samples_per_cell
+          local sample_y = y - 0.5 + (sy + 0.5) / samples_per_cell
+
+          if point_in_polygon(sample_x, sample_y, norm_points) then
+            inside_count = inside_count + 1
+          end
+        end
+      end
+
+      shape[y][x] = (inside_count / total_samples) > 0.5
+    end
+  end
+
+  return shape
+end
+
+-- Point in polygon test using ray casting
+function point_in_polygon(x, y, points)
+  local inside = false
+  local j = #points
+
+  for i = 1, #points do
+    local xi, yi = points[i].x, points[i].y
+    local xj, yj = points[j].x, points[j].y
+
+    if ((yi > y) ~= (yj > y)) and
+        (x < (xj - xi) * (y - yi) / (yj - yi) + xi) then
+      inside = not inside
+    end
+    j = i
+  end
+
+  return inside
+end
+
+-- ============================================================================
+
+function convertY(y, ref_img)
+  return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+function Process(req)
+  local img          = InImage:GetValue(req)
+  local out          = img:CopyOf()
+  local grid_size    = math.floor(GridSize:GetValue(req).Value)
+  local globalScale  = InGlobalScale:GetValue(req).Value
+  local char_spacing = InCharacterSpacing:GetValue(req).Value
+  --local line_spacing = InLineSpacing:GetValue(req).Value
+  local resolution   = InResolution:GetValue(req).Value
+  local thickness    = InThickness:GetValue(req).Value
+  local numRects     = NumRects:GetValue(req).Value
+
+  local ic           = ImageChannel(out, 8)
+  local fs           = FillStyle()
+  local cs           = ChannelStyle()
+  local mat          = Matrix4()
+  ic:SetStyleFill(fs)
+
+  local r_bg             = InR_bg:GetValue(req).Value
+  local g_bg             = InG_bg:GetValue(req).Value
+  local b_bg             = InB_bg:GetValue(req).Value
+  --local fit              = InFitScale:GetValue(req).Value
+  local hori_adjust      = InHori_adjustment:GetValue(req).Value
+  local ver_adjust       = InVer_adjustment:GetValue(req).Value
+
+  local array_str_groups = InGroups:GetValue(req):GetValue() or {}
+  local tbl_Groups       = {}
+  if array_str_groups and array_str_groups ~= "" then
+    local inp_groups_tbl = array_str_groups
+    if inp_groups_tbl ~= nil and type(inp_groups_tbl) == "table" then
+      tbl_Groups = inp_groups_tbl
+    end
+  end
+
+  mat:Identity()
+
+  -- Prepare group data
+  local textData = InScriptValText:GetValue(req):GetValue() or {}
+  local normGroups = {}
+  local idx = 1
+  for _, groupSize in ipairs(tbl_Groups) do
+    local group = {}
+    for i = 1, groupSize do
+      if textData[idx] then
+        table.insert(group, textData[idx])
+      end
+      idx = idx + 1
+    end
+    table.insert(normGroups, group)
+  end
+
+  local group_offsets = {}
+  local offsetX = 0
+  local shape_Holder = Shape()
+
+  for j = 1, #tbl_Groups do
+    local shapeBase_C = Shape()
+
+    -- Normalize each group separately
+    local norm = {}
+    if normGroups[j] then
+      norm = normalize_points(normGroups[j], grid_size)
+    end
+    local shapeGrid = fill_polygon(norm, grid_size)
+    local packed = pack_rectangles(shapeGrid, grid_size, numRects, resolution)
+
+    -- Calculate bounding box of packed rectangles for this group
+    local minX, maxX = math.huge, -math.huge
+    for _, rect in ipairs(packed) do
+      minX = math.min(minX, rect.x)
+      maxX = math.max(maxX, rect.x + rect.w)
+    end
+    local groupWidth = (maxX - minX) / grid_size * 2 -- scale to output space
+
+    -- Move this group to the correct position
+    local char_mat = Matrix4()
+    char_mat:Identity()
+    char_mat:Scale(-1, 1, 1.0)
+    char_mat:Move(offsetX, 0, 0)
+
+    for _, rect in ipairs(packed) do
+      local fx = ((rect.x / grid_size) * 2 - 1)
+      local fy = (1 - (rect.y / grid_size) * 2)
+      local fw = (rect.w / grid_size) * 2
+      local fh = (rect.h / grid_size) * 2
+
+      -- Draw the rectangle (dot)
+      local dotShape = Shape()
+      dotShape:AddRectangle(fx, fx + fw, fy - fh, fy, 0, 8)
+      shapeBase_C:AddShape(dotShape)
+    end
+
+    shapeBase_C = shapeBase_C:TransformOfShape(char_mat)
+    shapeBase_C = shapeBase_C:OutlineOfShape(thickness, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+    shape_Holder:AddShape(shapeBase_C)
+
+    -- Increment offsetX for next group
+    offsetX = offsetX + groupWidth + char_spacing
+  end
+
+  mat:Identity()
+  mat:Scale(globalScale, globalScale, 1.0)
+  mat:Move(0.5, convertY(0.5, img), 0)
+  mat:Move(hori_adjust, ver_adjust, 0)
+
+  cs.Color = Pixel({ R = r_bg, G = g_bg, B = b_bg, A = 1 })
+  ic:SetStyleFill(fs)
+  ic:ShapeFill(shape_Holder:TransformOfShape(mat))
+  ic:PutToImage("CM_Merge", cs)
+
+  Output:Set(req, out)
+end
+
+function NotifyChanged(inp, param, time)
+  -- when the tools FontFileControl is first created, the FontManager has not yet
+  -- provided a FontList, so we can't set a default value. Instead we do it here.
+  if inp == InFont then
+    local f = param.Value
+
+    if f == nil or string.len(f) == 0 then
+      InFont:SetSource(Text("Open Sans"), time)
+    end
+  elseif inp == InFontStyle then
+    local f = param.Value
+
+    if f == nil or string.len(f) == 0 then
+      InFontStyle:SetSource(Text("Regular"), time)
+    end
+  end
+
+  if inp == InShowInput then
+    if param.Value == 1.0 then visible = true else visible = false end
+  end
+end

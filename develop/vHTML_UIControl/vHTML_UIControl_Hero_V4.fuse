@@ -1,0 +1,636 @@
+-- ============================================================================
+-- version
+-- ============================================================================
+version         = "v1.00 - Date"
+-- ============================================================================
+-- modules
+-- ============================================================================
+local ffi       = require("ffi")
+local curl      = require("lj2curl")
+local json      = require("dkjson") -- or use cjson if available
+local jsonutils = self and require("vjsonutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME       = "vHTML_UIControl_Hero_V4"
+DATATYPE        = "Image"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+  --REGS_Category      = "Kartaverse\\Vonk Ultra\\Mograph\\HTML\\UI",
+  REGS_Category      = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_Name          = FUSE_NAME,
+  REGS_OpIconString  = FUSE_NAME,
+  REGS_OpDescription = FUSE_NAME,
+  REG_TimeVariant    = true,
+  REG_Unpredictable  = true,
+  REGS_IconID        = "Icons.Tools.Icons.StickyNote",
+  REG_Version        = 100,
+})
+local ConnectionLabel = [[
+<table align="center" cellspacing="8">
+  <tr>
+    <td style="text-align: center;"></td>
+    <td style="text-align: center; background-color: #051626; color: white; padding: 5px; font-weight: bold;">← VEIW NODE  --- [  ]] ..
+    FUSE_NAME .. [[ ] --- IN VEIWER</td>
+    <td style="text-align: center;"></td>
+  </tr>
+</table>
+]]
+-- Keep only the base LoadImage for fallback
+LoadImage=""
+
+
+-- Initialize a table to store dynamic images
+local DynamicImages
+local DynamicComp
+local MegaImages
+
+-- ------------------------------------------------------------------------
+local Start_sample_1 = [[
+<table align="center" cellspacing="8">
+  <tr>
+    <td style="text-align: center;">[ vScriptValUnPacker ]  → </td>
+    <td style="text-align: center; background-color: #051626; color: white; padding: 5px; font-weight: bold;">[ ]] ..
+    FUSE_NAME .. [[ ]</td>
+    <td style="text-align: center;">  → [ vScriptValPacker ]</td>
+  </tr>
+</table>
+]]
+
+-- Rest of your Start_sample_Url and functions remain the same...
+local Start_sample_Url = [[
+
+-- Open a webpage window up using your default web browser
+                    platform = (FuPLATFORM_WINDOWS and "Windows") or (FuPLATFORM_MAC and "Mac") or (FuPLATFORM_LINUX and "Linux")
+                    function OpenURL(siteName, path)
+                        if platform == "Windows" then
+                            -- Running on Windows
+                            command = "explorer \"" .. path .. "\""
+                        elseif platform == "Mac" then
+                            -- Running on Mac
+                            command = "open \"" .. path .. "\" &"
+                         elseif platform == "Linux" then
+                            -- Running on Linux
+                            command = "xdg-open \"" .. path .. "\" &"
+                        else
+                            print("[Error] There is an invalid Fusion platform detected")
+                            return
+                        end
+                        os.execute(command)
+                        -- print("[Launch Command] ", command)
+                        print("[Opening URL] [" .. siteName .. "] " .. path)
+                    end
+
+                    -- OpenURL("Demo", "https://www.steakunderwater.com/wesuckless/viewtopic.php?t=5412")
+    ]]
+
+
+
+-- Your Create() function remains the same...
+function Create()
+  -- [[ Creates the user interface. ]]
+  InLabelConnect = self:AddInput(ConnectionLabel, 'LabelConnect', {
+    LINKID_DataType = 'Text',
+    INPID_InputControl = 'LabelControl',
+    LBLC_MultiLine = true,
+    INP_External = false,
+    INP_Passive = true,
+    IC_ControlPage = -1,
+    IC_NoLabel = true,
+    IC_NoReset = true,
+  })
+
+  InEmptySpace1 = self:AddInput('    ', 'EmptySpace1', {
+    LINKID_DataType = 'Text',
+    INPID_InputControl = 'LabelControl',
+    ICD_Width = 0.3,
+    INP_External = false,
+    IC_ControlPage = -1,
+    INP_Passive = true,
+    IC_NoLabel = true,
+    IC_NoReset = true,
+  })
+  InLabeltable_Hero = self:AddInput("", 'Labeltbl_hero', {
+    LINKID_DataType = 'Text',
+    INPID_InputControl = 'LabelControl',
+    LBLC_MultiLine = true,
+    INP_External = false,
+    INP_Passive = true,
+    IC_ControlPage = -1,
+    IC_NoLabel = true,
+    IC_NoReset = true,
+    INP_DoNotifyChanged = true,
+  })
+
+  InLabeltable = self:AddInput("", 'Labeltbl', {
+    LINKID_DataType = 'Text',
+    INPID_InputControl = 'LabelControl',
+    LBLC_MultiLine = true,
+    INP_External = false,
+    INP_Passive = true,
+    IC_ControlPage = -1,
+    IC_NoLabel = true,
+    IC_NoReset = true,
+    INP_DoNotifyChanged = true,
+  })
+  InLabelCounter = self:AddInput("", 'LabelCounter', {
+    LINKID_DataType = 'Text',
+    INPID_InputControl = 'LabelControl',
+    LBLC_MultiLine = true,
+    INP_External = false,
+    INP_Passive = true,
+    IC_ControlPage = -1,
+    IC_NoLabel = true,
+    IC_NoReset = true,
+    INP_DoNotifyChanged = true,
+  })
+
+  InScroll = self:AddInput('Scroll Images', 'Scroll', {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_MinAllowed = 1,
+    INP_MaxScale = 100.0,
+    INP_Default = 1,
+    INP_Integer = true,
+    IC_ControlPage = -1,
+    -- INP_DoNotifyChanged = true,
+
+  })
+
+  InLabelSample_1 = self:AddInput(Start_sample_1, 'LabelSample_1', {
+    LINKID_DataType = 'Text',
+    INPID_InputControl = 'LabelControl',
+    LBLC_MultiLine = true,
+    INP_External = false,
+    INP_Passive = true,
+    IC_ControlPage = -1,
+    IC_NoLabel = true,
+    IC_NoReset = true,
+  })
+  Sample_1_Button = self:AddInput("Sample 1", "Sample_1", {
+    LINKS_Name = "Load Sample 1",
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ButtonControl",
+    IC_ControlPage = -1,
+    BTNCS_Execute = Start_sample_Url,
+    INP_DoNotifyChanged = true,
+  })
+  InSeparator_1 = self:AddInput("Separator_1", "Separator_1", {
+    INPID_InputControl = "SeparatorControl",
+    INP_External = false,
+    IC_Visible = false,
+  })
+  -- --------------------------------------------------------------Connection
+  InTriggerRequest = self:AddInput("Trigger Request", "Trigger", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ButtonControl",
+    INP_Default = 0,
+    INP_DoNotifyChanged = true,
+    INP_External = false,
+    INP_Integer = true,
+  })
+  -- --------------------------------------------------------------
+  self:BeginControlNest("Connection Settings", "ConnectionSettings", false, {})
+  OutMeta = self:AddOutput("Output", "Output", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+
+  InURL = self:AddInput("URL", "URL", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    TEC_Lines = 3,
+    LBLC_MultiLine = true,
+    TEC_Wrap = true,
+  })
+
+  InAuthToken = self:AddInput("Auth Token", "AuthToken", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    TEC_Lines = 1,
+    LBLC_MultiLine = true,
+    TEC_Wrap = true,
+  })
+  -- Auth type selection
+  InAuthType = self:AddInput("AuthType", "AuthType", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ComboControl",
+    LINKS_Name = "Auth Type",
+    { CCS_AddString = "Bearer Token", },
+    { CCS_AddString = "API Key Header", },
+    { CCS_AddString = "Basic Auth", },
+    INP_Default = 0,
+    INP_Integer = true,
+  })
+
+  -- Optional: Custom headers
+  InCustomHeaders = self:AddInput(" CustomHeaders", "CustomHeaders", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    TEC_Lines = 1,
+    LINKS_Name = "Custom Headers",
+    LBLC_MultiLine = true,
+    TEC_Wrap = true,
+    --IC_Default = "Content-Type: application/json\nUser-Agent: Fusion-Demo/1.0",
+  })
+
+  InJSONComp = self:AddInput("JSON Comp", "JSONComp", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    -- INP_Default = "Response from server will be displayed here",
+    INP_External = false,
+    INP_Integer = false,
+    LBLC_MultiLine = true,
+    TEC_Lines = 10,
+    TEC_Visible = true,
+    TEC_Wrap = true,
+  })
+
+  Inline1Separator1 = self:AddInput("line1Separator1", "line1Separator1", {
+    INPID_InputControl = "SeparatorControl",
+    IC_Visible = true,
+    INP_External = false,
+  })
+
+
+  Inline1Separator2 = self:AddInput("line1Separator2", "line1Separator2", {
+    INPID_InputControl = "SeparatorControl",
+    IC_Visible = true,
+    INP_External = false,
+  })
+
+  InResponse = self:AddInput("Server Response", "Response", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    -- INP_Default = "Response from server will be displayed here",
+    INP_External = false,
+    INP_Integer = false,
+    LBLC_MultiLine = true,
+    TEC_Lines = 10,
+    TEC_Visible = true,
+    TEC_Wrap = true,
+  })
+  InJSONResponse = self:AddInput("JSON Response", "JSONResponse", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    -- INP_Default = "Response from server will be displayed here",
+    INP_External = false,
+    INP_Integer = false,
+    LBLC_MultiLine = true,
+    TEC_Lines = 10,
+    TEC_Visible = true,
+    TEC_Wrap = true,
+  })
+
+  self:EndControlNest()
+
+  OutImage = self:AddOutput("Output", "Output", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+end
+
+local myDynamicImages
+
+function NotifyChanged(inp, param, time)
+  local ok, err = pcall(function()
+    if inp == InTriggerRequest then
+      if param.Value == 1.0 then
+        print("Trigger Request: " .. param.Value)
+       
+
+        local ffi = require("ffi")
+        local curl = require("lj2curl")
+
+        ffi.cdef [[
+          typedef unsigned long size_t;
+          typedef size_t (*write_callback_t)(char *ptr, size_t size, size_t nmemb, void *userdata);
+        ]]
+        local url =
+        "https://docs.google.com/spreadsheets/d/1148Nuj5dQ_p_Z5Ljz04koWZRxQ2opmuiH-OF12sqQFY/gviz/tq?tqx=out:json&tq&gid=1743142223"
+
+        --local url = self:FindInput("URL"):GetSource(time, 0).Value or "https://docs.google.com/spreadsheets/d/1148Nuj5dQ_p_Z5Ljz04koWZRxQ2opmuiH-OF12sqQFY/gviz/tq"
+        local token = self:FindInput("AuthToken"):GetSource(time, 0).Value or ""
+        local auth_type = self:FindInput("AuthType"):GetSource(time, 0).Value or 0
+        local custom_headers = self:FindInput("CustomHeaders"):GetSource(time, 0).Value or ""
+
+        if url == "" then
+          error("URL is empty")
+        end
+
+        print("Starting HTTP request to: " .. url)
+
+        local c = curl.curl_easy_init()
+        if c == nil then
+          error("Failed to initialize cURL")
+        end
+
+        local response_data = {}
+        local function write_cb(ptr, size, nmemb, userdata)
+          local length = size * nmemb
+          if length > 0 then
+            local str = ffi.string(ptr, length)
+            table.insert(response_data, str)
+          end
+          return length
+        end
+
+        local c_write_cb = ffi.cast("write_callback_t", write_cb)
+
+        -- HEADER SETUP
+        local slist = nil
+        slist = curl.curl_slist_append(slist, "Accept: application/json")
+
+        -- Add authentication header based on type
+        if auth_type == 0 then     -- Bearer Token
+          slist = curl.curl_slist_append(slist, "Authorization: Bearer " .. token)
+        elseif auth_type == 1 then -- API Key
+          slist = curl.curl_slist_append(slist, "X-API-Key: " .. token)
+        elseif auth_type == 2 then -- Basic Auth (assuming token is base64 encoded)
+          slist = curl.curl_slist_append(slist, "Authorization: Basic " .. token)
+        end
+
+        -- Custom headers (one per line)
+        if custom_headers ~= "" then
+          for header in custom_headers:gmatch("[^\r\n]+") do
+            slist = curl.curl_slist_append(slist, header)
+          end
+        end
+
+        curl.curl_easy_setopt(c, curl.CURLOPT_URL, url)
+        curl.curl_easy_setopt(c, curl.CURLOPT_HTTPHEADER, slist)
+        curl.curl_easy_setopt(c, curl.CURLOPT_WRITEFUNCTION, c_write_cb)
+        curl.curl_easy_setopt(c, curl.CURLOPT_TIMEOUT, 10)
+
+        local res = curl.curl_easy_perform(c)
+        if res ~= 0 then
+          error("cURL error code: " .. tostring(res))
+        end
+
+        curl.curl_slist_free_all(slist)
+        curl.curl_easy_cleanup(c)
+
+        local full_response = table.concat(response_data)
+        InResponse:SetSource(Text(full_response), 0)
+
+        print("Request complete.")
+
+        -- Parse the response and store dynamic images
+        local weather_data = parseGoogleVisualizationResponse(full_response)
+
+        -- Clear existing dynamic images
+         DynamicImages = {}
+         DynamicComp = {}
+
+        -- Store images in the DynamicImages table
+        for i, row in ipairs(weather_data) do
+          if row.image then
+            DynamicImages[i] = row.image
+            DynamicComp[i] = row.comp
+
+          end
+        end
+
+        -- Show the JSON-encoded table of dynamic images in the JSON response field
+        InJSONResponse:SetSource(Text(json.encode(DynamicImages)), 0)
+        InJSONComp:SetSource(Text(json.encode(DynamicComp)), 0)
+
+
+        print("Loaded " .. #weather_data .. " dynamic images")
+      end
+
+      --
+    end
+  end)
+
+  if not ok then
+    print("HTTP Request Failed:", err)
+    InResponse:SetSource(Text("Error: " .. tostring(err)), 0)
+  end
+
+
+--Copy And Paste Button
+  if inp == Sample_1_Button then
+    if param.Value == 1.0 then
+      --
+      local content = jsonutils.decode(self:FindInput("JSONComp"):GetSource(time, 0).Value)
+      local numberCount = self:FindInput("LabelCounter"):GetSource(time, 0).Value
+
+     -- print("this was clicked: ", param.Value, #content, "mainIdex:", numberCount)
+
+    -- Copy And Paste
+      bmd.setclipboard(content[tonumber(numberCount)])
+      ParseURL("Paste://")
+    end
+  end
+
+end
+
+-- rotate Arrays
+function rotateArray(array, n, guard)
+  n = n or guard and 1 or 0
+  n = n % #array
+  local rotatedArray = {}
+  for i = n + 1, #array do
+    rotatedArray[#rotatedArray + 1] = array[i]
+  end
+  for i = 1, n do
+    rotatedArray[#rotatedArray + 1] = array[i]
+  end
+  return rotatedArray
+end
+
+
+
+function createGUI(req, array)
+  local newArr = {}
+  local rotate = InScroll:GetValue(req).Value
+  local data = {}
+  for i = 1, #array do -- Create 24 slots
+    data[i] = array[i] or LoadImage
+  end
+  local align = "center"
+  local cellspacing = 30
+  local tbl_style = "border: 1px solid white;"
+  local cols = 4
+  local rows = math.ceil(4 / cols)
+  local dataIndex = 1
+  
+  -- Calculate mainIndex once, representing the first visible item
+  local mainIndex = ((rotate - 1) % #data) + 1
+  
+  newArr = rotateArray(data, rotate-1, 0)
+  local HeroImage_2 = [[
+  <table align="center" border="1" bordercolor="#aaa"cellspacing="0" cellpadding="0">
+    <tr>
+    <td ><img align="center" width="450" height="250" src="]] .. newArr[dataIndex] .. [["></td>
+    </tr>
+</table>
+ ]]
+  htmlTable = [[<table align="]] .. align .. [[" cellspacing="]] .. cellspacing .. [[" style="]] .. tbl_style .. [[">]]
+  ------------------------------------ Create dynamic Html interface
+  for i = 1, rows do
+    htmlTable = htmlTable .. [[<tr>]]
+    for j = 1, cols do
+      if newArr[dataIndex] then
+        -- Calculate the original index before rotation
+        local originalIndex = ((dataIndex - 1 + rotate - 1) % #data) + 1
+        
+        -- Add border style for the item that matches mainIndex
+        local borderStyle = ""
+        if originalIndex == mainIndex then
+          --borderStyle = [[ style="border: 1px solid #00ff00;  border-style: dotted; padding-right: 16;"]]  -- Green border
+          borderStyle = [[ style="border: 0.01px solid #000000; "]]  -- Green border
+        end
+        
+   
+        htmlTable = htmlTable ..
+            [[<td]] .. borderStyle .. [[><center><img width="92" height="80" dataSelect="]] ..
+            dataIndex .. [[" src="]] .. newArr[dataIndex] .. [["></center></td>]]
+      else
+        htmlTable = htmlTable .. [[<td></td>]]
+      end
+      dataIndex = dataIndex + 1
+    end
+    htmlTable = htmlTable .. [[</tr>]]
+  end
+  htmlTable = htmlTable .. [[</table>]]
+  InLabelCounter:SetSource(Text(mainIndex), 0)
+  InLabeltable:SetSource(Text(htmlTable), 0)
+  InLabeltable_Hero:SetSource(Text(HeroImage_2), 0)
+end
+
+
+
+
+
+
+function parseGoogleVisualizationResponse(responseText)
+  -- Remove the wrapper: google.visualization.Query.setResponse(
+  local jsonText = responseText:match("setResponse%((.*)%)%s*;?%s*$")
+  if not jsonText then
+    error("Failed to extract JSON from response")
+  end
+
+  local response, pos, err = json.decode(jsonText)
+  if err then
+    error("JSON Decode Error: " .. err)
+  end
+
+  local data = {}
+  for _, row in ipairs(response.table.rows) do
+    local cells = row.c
+    local day = cells[1] and cells[1].v or nil
+    local dateStr = cells[2] and cells[2].v or nil
+    local low = cells[3] and cells[3].v or nil
+    local high = cells[4] and cells[4].v or nil
+    local icon = cells[5] and cells[5].v or nil
+    local description = cells[6] and cells[6].v or nil
+    local title = cells[7] and cells[7].v or nil
+    local image = cells[8] and cells[8].v or nil
+    local comp = cells[9] and cells[9].v or nil
+
+    -- Convert Google date: Date(2024,4,3) → "2024-05-03"
+    local date = nil
+    if dateStr and dateStr:match("^Date%(") then
+      local y, m, d = dateStr:match("Date%((%d+),(%d+),(%d+)%)")
+      if y and m and d then
+        date = string.format("%04d-%02d-%02d", tonumber(y), tonumber(m) + 1, tonumber(d))
+      end
+    end
+
+    table.insert(data, {
+      day = day,
+      date = date,
+      low = low,
+      high = high,
+      icon = icon,
+      description = description,
+      title = title,
+      image = image,
+      comp = comp,
+    })
+
+    --table.insert(MegaImages, {image = image,})
+  end
+
+  return data
+end
+
+function Process(req)
+  -- createGUI(req)
+
+  local array_str_Response = InJSONResponse:GetValue(req).Value
+
+  local tbl_Response = {}
+  if array_str_Response and array_str_Response ~= "" then
+    local inp_Response_tbl = jsonutils.decode(array_str_Response)
+    if inp_Response_tbl ~= nil and type(inp_Response_tbl) == "table" then
+      tbl_Response = inp_Response_tbl
+    end
+  end
+
+
+  -- local array_str_comp = json.decode(InJSONComp:GetValue(req).Value)
+  -- dump(#array_str_comp)
+
+
+  --   local cc = [[{
+  --   Tools = ordered() {
+  --     vTextToHTMLViewer1 = Fuse.vTextToHTMLViewer {
+  --       CtrlWZoom = false,
+  --       ViewInfo = OperatorInfo { Pos = { 1485, 379.5 } },
+  --     }
+  --   },
+  --   ActiveTool = "vTextToHTMLViewer1"
+  -- }"]]
+
+
+
+
+
+  --local arrayA = jsonutils.decode(InJSONResponse:GetValue(req).Value)
+  if not tbl_Response or type(tbl_Response) ~= "table" or next(tbl_Response) == nil then
+    print("connect to server or Error: Invalid JSON response")
+    return
+  end
+  createGUI(req, tbl_Response)
+
+  local imgattrs = {
+    IMG_Document = self.Comp,
+    IMAT_OriginalWidth = 0,
+    IMAT_OriginalHeight = 0,
+  }
+  local img = Image(imgattrs)
+
+  OutImage:Set(req, img)
+end
+
+
+
+function ParseURL(url)
+  if not string.find(url, "\n") then
+    local scriptStr = "local tool = comp:FindTool([=[" ..
+        tostring(self.Name) .. "]=])\nlocal evURL = [=[" .. tostring(url) .. "]=]\n" .. [=[
+
+  -- Handle Paste command
+  if string.match(evURL, '^[Pp]aste://') then
+    -- Paste element
+    print('[Paste] ')
+    comp:Paste()
+  else
+    -- Fallback for all other URLs
+    return false
+  end
+
+  -- Reset the clicked URL text
+  if tool then
+    tool["Label"] = tool.Input[comp.CurrentTime]
+  end
+]=]
+    -- Run the code
+    self.Comp:Execute(scriptStr)
+  end
+end

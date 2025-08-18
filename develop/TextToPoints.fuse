@@ -1,0 +1,397 @@
+FuRegisterClass("TextToPoints", CT_Tool, {
+    REGS_Category      = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_OpIconString = "TTP",
+    REGS_OpDescription = "Convert text to filled point cloud",
+    REGS_Company = "Custom",
+    REGS_URL = "",
+    REGS_HelpTopic = "",
+})
+
+function Create()
+    -- Text input
+    InText = self:AddInput("Text", "Text", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        TEC_Lines = 1,
+        IC_Default = "FUSION",
+    })
+    
+    -- Spacing control
+    InSpacing = self:AddInput("Spacing", "Spacing", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.2,
+        INP_MinScale = 0.01,
+        INP_MaxScale = 1.0,
+    })
+    
+    -- Font size
+    InSize = self:AddInput("Font Size", "FontSize", {
+        LINKID_DataType = "Number", 
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.1,
+        INP_MaxScale = 5.0,
+    })
+    
+    -- Scale multiplier
+    InScale = self:AddInput("Scale", "Scale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl", 
+        INP_Default = 1.9,
+        INP_MinScale = 0.1,
+        INP_MaxScale = 10.0,
+    })
+    
+    -- Character spacing
+    InCharSpacing = self:AddInput("Character Spacing", "CharSpacing", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.1,
+        INP_MaxScale = 5.0,
+    })
+    
+    -- Font selection
+    InFont = self:AddInput("Font", "Font", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        TEC_Lines = 1,
+        IC_Default = "Open Sans",
+    })
+    
+    -- Font style
+    InStyle = self:AddInput("Font Style", "FontStyle", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl", 
+        TEC_Lines = 1,
+        IC_Default = "Bold",
+    })
+    
+    -- Output table
+    OutPoints = self:AddOutput("Points", "Points", {
+        LINKID_DataType = "Table",
+        LINK_Main = 1,
+    })
+    
+    -- Debug output
+    OutBounds = self:AddOutput("Bounds", "Bounds", {
+        LINKID_DataType = "Table",
+        LINK_Main = 2,
+    })
+end
+
+function d_string_fill(text, spacing, size, scale, char_spacing, font_name, font_style)
+    local spacer = char_spacing or 1.0
+    local mat = Matrix4()
+    local fontName = font_name or "Open Sans"
+    local style = font_style or "Bold"
+    local fontSize = size or 1.0
+    local scaleVal = scale or 1.9
+    
+    -- Create font and get metrics
+    local font = TextStyleFont(fontName, style)
+    local tfm = TextStyleFontMetrics(font)
+    
+    -- Setup transformation matrix
+    mat:Scale(1.0 / tfm.Scale, 1.0 / tfm.Scale, 1.0)
+    mat:Scale(fontSize, fontSize, 1)
+    mat:Scale(scaleVal, scaleVal, 1)
+    
+    local shape = Shape()
+    local x_cursor = 0
+    local prev_ch = nil
+    
+    -- Build text shape
+    for i = 1, #text do
+        local ch = text:byte(i)
+        local cw = tfm:CharacterWidth(ch) * fontSize
+        
+        -- Apply kerning
+        if prev_ch then
+            local kern = tfm:CharacterKerning(prev_ch, ch) or 0
+            x_cursor = x_cursor + kern * fontSize + spacer * fontSize
+        end
+        
+        -- Position character
+        local char_mat = Matrix4(mat)
+        char_mat:Move(x_cursor + cw / 2, 0, 0)
+        
+        -- Get character shape
+        local ch_shape = tfm:GetCharacterShape(ch, false)
+        if ch_shape then
+            ch_shape = ch_shape:TransformOfShape(char_mat)
+            shape:AddShape(ch_shape)
+        end
+        
+        x_cursor = x_cursor + cw
+        prev_ch = ch
+    end
+    
+    -- Alternative point extraction methods
+    local points = {}
+    local success = false
+    
+    -- Try multiple methods to extract points from shape
+    if not success and shape.GetContours then
+        local contours = shape:GetContours()
+        if contours then
+            for _, contour in ipairs(contours) do
+                if type(contour) == "table" then
+                    for _, point in ipairs(contour) do
+                        table.insert(points, {x = point.x, y = point.y})
+                    end
+                end
+            end
+            success = (#points > 0)
+        end
+    end
+    
+    if not success and shape.GetPoints then
+        local shape_points = shape:GetPoints()
+        if shape_points then
+            for i = 1, #shape_points do
+                local p = shape_points[i]
+                table.insert(points, {x = p.x, y = p.y})
+            end
+            success = (#points > 0)
+        end
+    end
+    
+    -- Fallback: Try flattening and alternative extraction
+    if not success then
+        local flat = shape:FlattenOfShape(8)
+        
+        -- Try various extraction methods
+        if flat.points then
+            for i = 1, #flat.points do
+                local p = flat.points[i]
+                table.insert(points, {x = p.x or p[1], y = p.y or p[2]})
+            end
+            success = (#points > 0)
+        elseif flat.vertices then
+            for i = 1, #flat.vertices, 2 do
+                table.insert(points, {
+                    x = flat.vertices[i], 
+                    y = flat.vertices[i + 1]
+                })
+            end
+            success = (#points > 0)
+        end
+    end
+    
+    -- If no points extracted, create a simple grid sampling
+    if not success or #points < 3 then
+        -- Create a bounding box and sample within it
+        local bbox = shape:GetBoundingBox()
+        if bbox then
+            local minX, minY = bbox.left or -5, bbox.bottom or -5
+            local maxX, maxY = bbox.right or 5, bbox.top or 5
+            
+            -- Sample grid within bounds
+            for y = minY, maxY, spacing do
+                for x = minX, maxX, spacing do
+                    -- Simple shape test - you might need to adjust this
+                    if shape:ContainsPoint() and shape:ContainsPoint(x, y) then
+                        table.insert(points, {x = x, y = y})
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Compute bounds from extracted points
+    local minX, minY = math.huge, math.huge
+    local maxX, maxY = -math.huge, -math.huge
+    
+    if #points > 0 then
+        for _, pt in ipairs(points) do
+            minX = math.min(minX, pt.x)
+            minY = math.min(minY, pt.y)
+            maxX = math.max(maxX, pt.x)
+            maxY = math.max(maxY, pt.y)
+        end
+    else
+        minX, minY, maxX, maxY = 0, 0, 0, 0
+    end
+    
+    -- Point-in-polygon test function
+    local function is_inside(x, y)
+        if #points < 3 then return false end
+        
+        local count = 0
+        for i = 1, #points do
+            local j = (i % #points) + 1
+            local xi, yi = points[i].x, points[i].y
+            local xj, yj = points[j].x, points[j].y
+            
+            if ((yi > y) ~= (yj > y)) then
+                local denom = yj - yi
+                if math.abs(denom) > 1e-10 then
+                    local intersect = (xj - xi) * (y - yi) / denom + xi
+                    if x < intersect then
+                        count = count + 1
+                    end
+                end
+            end
+        end
+        return (count % 2) == 1
+    end
+    
+    -- Fill with points
+    local fill_points = {}
+    if minX ~= math.huge and maxX ~= -math.huge then
+        for y = minY, maxY, spacing do
+            for x = minX, maxX, spacing do
+                if #points >= 3 and is_inside(x, y) then
+                    table.insert(fill_points, {x = x, y = y})
+                elseif #points < 3 then
+                    -- If we don't have a proper polygon, just add grid points
+                    table.insert(fill_points, {x = x, y = y})
+                end
+            end
+        end
+    end
+    
+    -- If no fill points, return outline points
+    if #fill_points == 0 and #points > 0 then
+        fill_points = points
+    end
+    
+    return fill_points, {minX = minX, minY = minY, maxX = maxX, maxY = maxY}
+end
+
+
+
+function GeneratePointsInsideText(self, req, text, spacing, width, height)
+    local font = TextStyleFont("Open Sans", "Bold")
+    local tfm = TextStyleFontMetrics(font)
+
+    local shape = Shape()
+    local mat = Matrix4()
+    mat:Scale(1.0 / tfm.Scale, 1.0 / tfm.Scale, 1.0)
+    mat:Scale(1.9, 1.9, 1)
+
+    local x_cursor = 0
+    for i = 1, #text do
+        local ch = text:byte(i)
+        local cw = tfm:CharacterWidth(ch)
+        local char_mat = Matrix4(mat)
+        char_mat:Move(x_cursor + cw / 2, height / 2, 0) -- y offset = center vertically
+        local ch_shape = tfm:GetCharacterShape(ch, false)
+        if ch_shape then
+            ch_shape = ch_shape:TransformOfShape(char_mat)
+            shape:AddShape(ch_shape)
+        end
+        x_cursor = x_cursor + cw + 1
+    end
+
+    -- Create image and clear it
+    local img = Image({
+        IMG_Document = self.Comp,
+        IMG_Width = width,
+        IMG_Height = height,
+        { IMG_Channel = "Alpha" },
+        { IMG_Channel = "Red" },
+        { IMG_Channel = "Green" },
+        { IMG_Channel = "Blue" },
+    })
+    img:Fill({R = 0, G = 0, B = 0, A = 0})
+
+    -- Simulate drawing: fill pixels inside bounding area of shape
+    local spacingPx = math.max(1, math.floor(spacing))
+
+    local points = {}
+    for y = 0, height - 1, spacingPx do
+        for x = 0, width - 1, spacingPx do
+            local sample_mat = Matrix4()
+            sample_mat:Move(x, y, 0)
+            local test_shape = shape:TransformOfShape(sample_mat)
+            if test_shape then
+                local pixel_alpha = 1.0 -- treat any point as a hit
+                img:SetPixel(x, y, {R = 1, G = 1, B = 1, A = pixel_alpha})
+                table.insert(points, {x = x, y = y})
+            end
+        end
+    end
+
+    return img, points
+end
+
+
+function Process(req)
+    local text = "FUSION"
+    local spacing = 6      -- spacing in pixels
+    local width = 256
+    local height = 128
+
+    local img, points = GeneratePointsInsideText(self.Comp, req, text, spacing, width, height)
+
+    print("Generated " .. tostring(#points) .. " points.")
+
+    -- OPTIONAL: visualize points in image
+    local vis_img = Image({
+        IMG_Document = self.Comp,
+        IMG_Width = width,
+        IMG_Height = height,
+        { IMG_Channel = "Red" },
+        { IMG_Channel = "Green" },
+        { IMG_Channel = "Blue" },
+        { IMG_Channel = "Alpha" },
+    })
+    vis_img:Fill({R = 0, G = 0, B = 0, A = 1})
+
+    for _, pt in ipairs(points) do
+        vis_img:SetPixel(pt.x, pt.y, {R = 1, G = 1, B = 1, A = 1})
+    end
+
+    OutImage:Set(req, vis_img)
+end
+
+
+
+
+
+
+
+function Process_old(req)
+    local text = InText:GetValue(req).Value or "FUSION"
+    local spacing = InSpacing:GetValue(req).Value
+    local size = InSize:GetValue(req).Value
+    local scale = InScale:GetValue(req).Value
+    local char_spacing = InCharSpacing:GetValue(req).Value
+    local font_name = InFont:GetValue(req).Value
+    local font_style = InStyle:GetValue(req).Value
+    
+    -- Generate points
+    local fill_points, bounds = d_string_fill(text, spacing, size, scale, char_spacing, font_name, font_style)
+    
+    -- Create output table
+    local points_table = {}
+    for i, pt in ipairs(fill_points) do
+        points_table[i] = {
+            x = pt.x,
+            y = pt.y,
+            z = 0  -- Add Z coordinate for 3D compatibility
+        }
+    end
+    
+    -- Create bounds table
+    local bounds_table = {
+        minX = bounds.minX,
+        minY = bounds.minY, 
+        maxX = bounds.maxX,
+        maxY = bounds.maxY,
+        width = bounds.maxX - bounds.minX,
+        height = bounds.maxY - bounds.minY,
+        count = #fill_points
+    }
+    
+    -- Debug output
+    print("Text: '" .. text .. "' - Generated " .. #fill_points .. " points")
+    print("Bounds: (" .. bounds.minX .. "," .. bounds.minY .. ") to (" .. bounds.maxX .. "," .. bounds.maxY .. ")")
+    
+    -- Set outputs
+    OutPoints:Set(req, points_table)
+    OutBounds:Set(req, bounds_table)
+end

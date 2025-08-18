@@ -1,0 +1,527 @@
+-- TaperedPath2D.fuse
+-- A 2D Fuse tool that creates a tapered path using Shape API
+-- Circles at points + trapezoids between segments + optional Bézier or B-spline interpolation
+
+FuRegisterClass("TaperedShape", CT_Tool,
+  {
+    REGS_OpIconString  = "TPD",
+    REGS_Category      = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_OpDescription = "Draws a tapered 2D path from point list with optional smoothing",
+    REG_Version        = 1,
+  })
+
+function Create()
+  InTaperStart = self:AddInput("Taper Start", "TaperStart", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.0,
+    INP_MinScale = 0.0,
+    INP_MaxScale = 1.0
+  })
+
+  InTaperEnd = self:AddInput("Taper End", "TaperEnd", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 1.0,
+    INP_MinScale = 0.0,
+    INP_MaxScale = 1.0
+  })
+
+  InCapsMode = self:AddInput("Caps", "Caps", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ComboControl",
+    INP_Default = 2,
+    INP_Integer = true,
+    { CCS_AddString = "None" },
+    { CCS_AddString = "Start/End Only" },
+    { CCS_AddString = "All Points" },
+    { CCS_AddString = "Middle Only" },
+
+    IC_Visible = false,
+    PC_Visible = false,
+  })
+
+  InStartWidth = self:AddInput("Start Width", "StartWidth", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 0.001,
+    INP_MaxScale = 0.2,
+    INP_Default = 0.05,
+  })
+
+  InEndWidth = self:AddInput("End Width", "EndWidth", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 0.001,
+    INP_MaxScale = 0.2,
+    INP_Default = 0.01,
+  })
+
+
+  InCircleSegments = self:AddInput("Circle Segments", "CircleSegments", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 16,
+    INP_MinScale = 2,
+    INP_MaxScale = 64,
+    INP_Integer = true
+  })
+
+
+
+  InScaleMatch = self:AddInput("Scale Match Taper", "ScaleMatchTaper", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ComboControl",
+    INP_Default = 0,
+    INP_Integer = true,
+    { CCS_AddString = "None" },
+    { CCS_AddString = "Match Taper" },
+  })
+  InShowCustom = self:AddInput("Show Custom", "showcustom_shapes", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "CheckboxControl",
+    INP_DoNotifyChanged = true,
+    INP_Integer = true,
+    INP_Default = 0,
+    ICD_Width = 1,
+  })
+
+  InCustomScale = self:AddInput("Custom Shape Scale ", "CustomScale", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 1.0,
+    INP_MinScale = 0.0,
+    INP_MaxScale = 1.0
+  })
+
+  self:BeginControlNest("Style", "Stylesetting", false, {})
+
+  InGradient = self:AddInput("Gradient", "Gradient", {
+    LINKID_DataType = "Gradient",
+    INPID_InputControl = "GradientControl",
+    LINK_Main = 1,
+    INPP_DefaultParam = grad,
+  })
+  InLow = self:AddInput("", "Low", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "RangeControl",
+    INP_Default = 1,
+    INP_MinAllowed = 1,
+    INP_MaxScale = 50,
+    IC_ControlGroup = 200,
+    IC_ControlID = 0,
+    INP_Integer = true,
+    RNGCS_MidName = "I<  Range Selection  >I",
+    IC_NoLabel = true,
+    IC_NoReset = true,
+
+    --IC_Visible = false,
+    --PC_Visible = false,
+  })
+
+  InHigh = self:AddInput("", "High", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "RangeControl",
+    INP_Default = 50,
+    INP_MinAllowed = 1,
+    INP_MaxScale = 50,
+    IC_ControlGroup = 200,
+    IC_ControlID = 1,
+    INP_Integer = true,
+    --IC_Visible = false,
+    --PC_Visible = false,
+  })
+
+  InSubdivColors = self:AddInput("Subdiv Color Range", "subdivColors", {
+    LINKID_DataType     = "Number",
+    INPID_InputControl  = "ScrewControl",
+    INP_Integer         = true,
+    INP_MinScale        = 0,
+    INP_MaxScale        = 10,
+    INP_MinAllowed      = 0,
+    INP_MaxAllowed      = 50,
+    INP_Default         = 0,
+    INP_DoNotifyChanged = true,
+  })
+
+  InEmptySpace1 = self:AddInput('    ', 'EmptySpace1', {
+    LINKID_DataType = 'Text',
+    INPID_InputControl = 'LabelControl',
+    ICD_Width = 0.3,
+    INP_External = false,
+    INP_Passive = true,
+    IC_NoLabel = true,
+    IC_NoReset = true,
+  })
+
+  InR = self:AddInput("Red", "Red", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_MinScale       = 0.0,
+    INP_MaxScale       = 1.0,
+    INP_Default        = 1.0,
+    ICS_Name           = "Color",
+    IC_ControlGroup    = 1,
+    IC_ControlID       = 0,
+  })
+
+  InG = self:AddInput("Green", "Green", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_MinScale       = 0.0,
+    INP_MaxScale       = 1.0,
+    INP_Default        = 1.0,
+    IC_ControlGroup    = 1,
+    IC_ControlID       = 1,
+  })
+
+  InB = self:AddInput("Blue", "Blue", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_MinScale       = 0.0,
+    INP_MaxScale       = 1.0,
+    INP_Default        = 1.0,
+    IC_ControlGroup    = 1,
+    IC_ControlID       = 2,
+  })
+
+  InA = self:AddInput("Alpha", "Alpha", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_MinScale       = 0.0,
+    INP_MaxScale       = 1.0,
+    INP_Default        = 1.0,
+    IC_ControlGroup    = 1,
+    IC_ControlID       = 3,
+  })
+
+  self:EndControlNest()
+
+  InThickness = self:AddInput("Thickness", "Thickness", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 0.001,
+    INP_MaxScale = 0.01,
+    INP_Default = 0.001,
+  })
+
+  InLineType = self:AddInput("Type", "Type", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "MultiButtonControl",
+    INP_Default        = 0.0,
+    MBTNC_ShowName     = false,
+    { MBTNC_AddButton = "Solid",        MBTNCD_ButtonWidth = 0.33, },
+    { MBTNC_AddButton = "Dash",         MBTNCD_ButtonWidth = 0.34, },
+    { MBTNC_AddButton = "Dot",          MBTNCD_ButtonWidth = 0.33, },
+    { MBTNC_AddButton = "Dash Dot",     MBTNCD_ButtonWidth = 0.5, },
+    { MBTNC_AddButton = "Dash Dot Dot", MBTNCD_ButtonWidth = 0.5, },
+  })
+
+  InImage = self:AddInput("Input", "Input", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+  InScriptVal = self:AddInput("ScriptVal", "ScriptVal", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 2
+  })
+  InVectorShape = self:AddInput("Vector Shape", "VectorShape", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 3
+  })
+
+  OutScriptVal = self:AddOutput("Shape", "Shape", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 2
+  })
+
+  OutImage = self:AddOutput("Image", "Image", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1
+  })
+end
+
+function BuildTrapezoid(shape, p1, p2, r1, r2)
+  local dx = p2[1] - p1[1]
+  local dy = p2[2] - p1[2]
+  local len = math.sqrt(dx * dx + dy * dy)
+  if len == 0 then return end
+  dx = dx / len
+  dy = dy / len
+  local nx, ny = -dy, dx
+
+  local tlx, tly = p1[1] + nx * r1, p1[2] + ny * r1
+  local blx, bly = p1[1] - nx * r1, p1[2] - ny * r1
+  local trx, try = p2[1] + nx * r2, p2[2] + ny * r2
+  local brx, bry = p2[1] - nx * r2, p2[2] - ny * r2
+
+  shape:MoveTo(tlx, tly)
+  shape:LineTo(trx, try)
+  shape:LineTo(brx, bry)
+  shape:LineTo(blx, bly)
+  shape:Close()
+end
+
+function convertY(y, ref_img)
+  return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+function Process(req)
+  local taperStart = InTaperStart and InTaperStart:GetValue(req).Value or 0.0
+  local taperEnd   = InTaperEnd and InTaperEnd:GetValue(req).Value or 1.0
+
+  local function taperInterp(t)
+    if t <= taperStart then
+      return 0
+    elseif t >= taperEnd then
+      return 1
+    else
+      return (t - taperStart) / (taperEnd - taperStart)
+    end
+  end
+
+  local capMode          = InCapsMode:GetValue(req).Value or 2
+  local startW           = InStartWidth:GetValue(req).Value or 0.05
+  local endW             = InEndWidth:GetValue(req).Value or 0.01
+
+  local in_r             = InR:GetValue(req).Value
+  local in_g             = InG:GetValue(req).Value
+  local in_b             = InB:GetValue(req).Value
+  local in_a             = InA:GetValue(req).Value
+
+  local linetype         = math.floor(InLineType:GetValue(req).Value + 0.5) + 1
+  local outlinetypes     = { "OLT_Solid", "OLT_Dash", "OLT_Dot", "OLT_DashDot", "OLT_DashDotDot", }
+  local thickness        = InThickness:GetValue(req).Value
+
+  local pointsArray      = InScriptVal:GetValue(req):GetValue() or {}
+  local vectorShape      = InVectorShape:GetValue(req):GetValue() or {}
+
+  local scaleMatch       = InScaleMatch:GetValue(req).Value
+  local customScale      = InCustomScale:GetValue(req).Value
+
+  local gradient         = InGradient:GetValue(req)
+  local startIndex       = math.floor(InLow:GetValue(req).Value)
+  local stopIndex        = math.ceil(InHigh:GetValue(req).Value)
+
+  local shapeHolder      = Shape()
+  local shapeTrap        = Shape()
+  local shapeCircle      = Shape()
+  local segmentCustom    = Shape()
+  local matCustom        = Matrix4()
+  local shapeArray       = {}
+  local trapArray        = {}
+  local colorArray       = {}
+  local customShapeArray = {}
+  local connectHolder    = Shape()
+
+  -- Render to image
+  local p                = Pixel({ R = 0, G = 0, B = 0, A = 0 })
+  local img              = InImage:GetValue(req)
+  img:Fill(p)
+  local out = img:CopyOf()
+
+  local ic = ImageChannel(out, 8)
+  local fs = FillStyle()
+  local cs = ChannelStyle()
+
+  ic:SetStyleFill(fs)
+
+  local mat = Matrix4()
+  mat:Identity()
+  mat:Move(0, 0, 0)
+
+  local points = {}
+  for i = 1, #pointsArray do
+    --table.insert(points, { pointsArray[i][1], convertY(pointsArray[i][2], img) })
+    table.insert(points, { pointsArray[i][1], pointsArray[i][2] })
+  end
+
+
+  local N = #points
+
+  -- Build trapezoids (connecting segments)
+  for i = 1, N - 1 do
+    shapeTrap = Shape()
+    local t1 = (i - 1) / (N - 1)
+    local t2 = i / (N - 1)
+    local r1 = (1 - taperInterp(t1)) * startW + taperInterp(t1) * endW
+    local r2 = (1 - taperInterp(t2)) * startW + taperInterp(t2) * endW
+    BuildTrapezoid(shapeTrap, points[i], points[i + 1], r1, r2)
+    table.insert(trapArray, shapeTrap)
+  end
+
+  -- Build circles/caps at each point
+  for i = 1, N do
+    if (capMode == 2) or (capMode == 1 and (i == 1 or i == N)) or (capMode == 3 and i ~= 1 and i ~= N) then
+      local t = (i - 1) / (N - 1)
+      local r = math.max((1 - taperInterp(t)) * startW + taperInterp(t) * endW, 0.001)
+      local cx, cy = points[i][1], points[i][2]
+      local step = InCircleSegments and InCircleSegments:GetValue(req).Value or 16
+
+      local circleShape = Shape()
+      for j = 0, step - 1 do
+        local angle1 = (j / step) * math.pi * 2
+        local angle2 = ((j + 1) / step) * math.pi * 2
+        local x1 = cx + r * math.cos(angle1)
+        local y1 = cy + r * math.sin(angle1)
+        local x2 = cx + r * math.cos(angle2)
+        local y2 = cy + r * math.sin(angle2)
+        if j == 0 then
+          circleShape:MoveTo(x1, y1)
+        end
+        circleShape:LineTo(x2, y2)
+      end
+      circleShape:Close()
+      table.insert(shapeArray, circleShape)
+    end
+  end
+
+  --Add Custom Shape to Image
+  if InShowCustom:GetValue(req).Value > 0.5 then
+    -- Build custom shapes at each point
+    for i = 1, N do
+      if vectorShape[1] ~= nil then
+        local shapeData = vectorShape[math.min(i, #vectorShape)]
+        local customShape = Shape()
+        customShape:AddShape(shapeData[2])
+
+        matCustom:Identity()
+        if scaleMatch == 0 then
+          matCustom:Scale(customScale, customScale, 1)
+        elseif scaleMatch == 1 then
+          local t = (i - 1) / (N - 1)
+          local r = math.max((1 - taperInterp(t)) * startW + taperInterp(t) * endW, 0.001) * 1000
+          matCustom:Scale(r * customScale, r * customScale, 1)
+        end
+
+        matCustom:Move(points[i][1], points[i][2], 0)
+        customShape = customShape:TransformOfShape(matCustom)
+
+        table.insert(customShapeArray, customShape)
+      end
+    end
+  end
+
+
+
+
+
+  ---[[
+  -- CORRECTED GRADIENT COLOR CALCULATION-NEW VERSION
+  local colorCount = gradient:GetColorCount()
+
+  -- Build gradient color table with P values
+  local gradientColors = {}
+  for index = 0, colorCount - 1 do
+    local color = gradient:GetColor(index)
+    local pValue = tonumber(color.P)
+    -- If P value is nil or invalid, assign a default based on index
+    if not pValue then
+      pValue = index / math.max(1, colorCount - 1)
+    end
+
+    table.insert(gradientColors, {
+      P = pValue,
+      R = tonumber(color.R) or 0,
+      G = tonumber(color.G) or 0,
+      B = tonumber(color.B) or 0,
+      A = tonumber(color.A) or 1
+    })
+  end
+
+  -- Sort by P value to ensure proper order (with nil-safe comparison)
+  table.sort(gradientColors, function(a, b)
+    local aP = a.P or 0
+    local bP = b.P or 0
+    return aP < bP
+  end)
+
+  local totalShapes = #shapeArray
+
+  -- Function to interpolate color at a given position (0-1)
+  local function getColorAtPosition(pos)
+    -- Clamp position to 0-1 range
+    pos = math.max(0, math.min(1, pos))
+
+    -- Find the two gradient stops that bracket this position
+    local leftStop = gradientColors[1]
+    local rightStop = gradientColors[#gradientColors]
+
+    for i = 1, #gradientColors - 1 do
+      if pos >= gradientColors[i].P and pos <= gradientColors[i + 1].P then
+        leftStop = gradientColors[i]
+        rightStop = gradientColors[i + 1]
+        break
+      end
+    end
+
+    -- Handle edge cases
+    if pos <= leftStop.P then
+      return leftStop
+    elseif pos >= rightStop.P then
+      return rightStop
+    end
+
+    -- Interpolate between the two stops
+    local t = (pos - leftStop.P) / (rightStop.P - leftStop.P)
+
+    return {
+      R = (1 - t) * leftStop.R + t * rightStop.R,
+      G = (1 - t) * leftStop.G + t * rightStop.G,
+      B = (1 - t) * leftStop.B + t * rightStop.B,
+      A = (1 - t) * leftStop.A + t * rightStop.A
+    }
+  end
+
+  -- Apply range selection if specified
+  local startIndex = math.floor(InLow:GetValue(req).Value)
+  local stopIndex = math.ceil(InHigh:GetValue(req).Value)
+
+  -- Normalize range indices to 0-1
+  local rangeStart = startIndex / math.max(1, colorCount - 1)
+  local rangeEnd = stopIndex / math.max(1, colorCount - 1)
+  rangeStart = math.max(0, math.min(1, rangeStart))
+  rangeEnd = math.max(0, math.min(1, rangeEnd))
+
+  -- Calculate gradient colors for each shape
+  for i = 1, totalShapes do
+    -- Calculate position along the path (0 to 1)
+    local pathPosition = (i - 1) / math.max(1, totalShapes - 1)
+
+    -- Map to the specified gradient range
+    local gradientPosition = rangeStart + pathPosition * (rangeEnd - rangeStart)
+
+    -- Get color at this position
+    local color = getColorAtPosition(gradientPosition)
+
+    -- Store shape with its color
+    colorArray[i] = color
+  end
+
+  ---]]
+
+
+
+
+  -- Create segment shapes with colors
+  for i = 1, #shapeArray do
+    local blankShape = Shape()
+    blankShape:AddShape(trapArray[i - 1])
+    blankShape:AddShape(shapeArray[i], true)
+
+    cs.Color = Pixel {
+      R = colorArray[i].R,
+      G = colorArray[i].G,
+      B = colorArray[i].B,
+      A = colorArray[i].A,
+    }
+
+    mat:Identity()
+    --mat:Move(0,0,0)
+    --mat:Move(0,-convertY(0.25,img), 0)
+    ic:ShapeFill(blankShape:TransformOfShape(mat))
+    ic:PutToImage("CM_Merge", cs)
+  end
+
+  OutImage:Set(req, out)
+end

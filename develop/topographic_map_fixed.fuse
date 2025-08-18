@@ -1,0 +1,346 @@
+-- ============================================================================
+-- TopographicMapV2.fuse
+-- Procedural topographic map generator using Perlin noise with proper contours
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "TopographicMapData"
+DATATYPE = "ScriptVal"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Procedurally generates a topographic map with contour lines from Perlin noise",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.TextPlus",
+    REG_Version = 200,
+    REG_TimeVariant = true,
+})
+
+-- ============================================================================
+-- Perlin noise generator
+-- ============================================================================
+local function fade(t) return t * t * t * (t * (t * 6 - 15) + 10) end
+local function lerp(t, a, b) return a + t * (b - a) end
+local function grad(hash, x, y)
+    local h = hash % 4
+    if h == 0 then return x + y end
+    if h == 1 then return -x + y end
+    if h == 2 then return x - y end
+    return -x - y
+end
+
+local permutation = {}
+local function initPermutation()
+    for i = 0, 255 do permutation[i] = math.random(0, 255) end
+    for i = 0, 255 do permutation[256 + i] = permutation[i] end
+end
+
+local function perlin(x, y)
+    local xi = math.floor(x) % 255
+    local yi = math.floor(y) % 255
+    local xf = x - math.floor(x)
+    local yf = y - math.floor(y)
+    local u = fade(xf)
+    local v = fade(yf)
+    local aa = permutation[permutation[xi] + yi]
+    local ab = permutation[permutation[xi] + yi + 1]
+    local ba = permutation[permutation[xi + 1] + yi]
+    local bb = permutation[permutation[xi + 1] + yi + 1]
+    local x1 = lerp(u, grad(aa, xf, yf), grad(ba, xf - 1, yf))
+    local x2 = lerp(u, grad(ab, xf, yf - 1), grad(bb, xf - 1, yf - 1))
+    return (lerp(v, x1, x2) + 1) / 2
+end
+
+-- ============================================================================
+-- Improved contour tracing using marching squares (normalized)
+-- ============================================================================
+local function getContourPoint(x1, y1, val1, x2, y2, val2, level, width, height)
+    if math.abs(val1 - val2) < 0.0001 then
+        local px = (x1 + x2) / 2
+        local py = (y1 + y2) / 2
+        return px / width, py / height -- Normalize to 0-1
+    end
+    local t = math.max(0, math.min(1, (level - val1) / (val2 - val1)))
+    local px = x1 + t * (x2 - x1)
+    local py = y1 + t * (y2 - y1)
+    return px / width, py / height -- Normalize to 0-1
+end
+
+local function getMarchingSquareCase(tl, tr, bl, br, level)
+    local case = 0
+    if tl >= level then case = case + 1 end
+    if tr >= level then case = case + 2 end
+    if br >= level then case = case + 4 end
+    if bl >= level then case = case + 8 end
+    return case
+end
+
+local function getContourSegments(x, y, tl, tr, bl, br, level, width, height)
+    local case = getMarchingSquareCase(tl, tr, bl, br, level)
+    local segments = {}
+
+    -- Edge points (interpolated and normalized)
+    local top = { getContourPoint(x, y, tl, x + 1, y, tr, level, width, height) }
+    local right = { getContourPoint(x + 1, y, tr, x + 1, y + 1, br, level, width, height) }
+    local bottom = { getContourPoint(x + 1, y + 1, br, x, y + 1, bl, level, width, height) }
+    local left = { getContourPoint(x, y + 1, bl, x, y, tl, level, width, height) }
+
+    -- Marching squares lookup table
+    if case == 1 or case == 14 then
+        table.insert(segments, { left, top })
+    elseif case == 2 or case == 13 then
+        table.insert(segments, { top, right })
+    elseif case == 3 or case == 12 then
+        table.insert(segments, { left, right })
+    elseif case == 4 or case == 11 then
+        table.insert(segments, { right, bottom })
+    elseif case == 5 then
+        table.insert(segments, { left, top })
+        table.insert(segments, { right, bottom })
+    elseif case == 6 or case == 9 then
+        table.insert(segments, { top, bottom })
+    elseif case == 7 or case == 8 then
+        table.insert(segments, { left, bottom })
+    elseif case == 10 then
+        table.insert(segments, { left, top })
+        table.insert(segments, { right, bottom })
+    end
+
+    return segments
+end
+
+-- ============================================================================
+-- Multi-octave noise function
+-- ============================================================================
+local function fractalNoise(x, y, octaves, persistence, scale, time, speed)
+    local value = 0
+    local amplitude = 1
+    local frequency = 1 / scale
+    local maxValue = 0
+
+    for i = 1, octaves do
+        value = value + perlin(x * frequency + time * speed, y * frequency + time * speed) * amplitude
+        maxValue = maxValue + amplitude
+        amplitude = amplitude * persistence
+        frequency = frequency * 2
+    end
+
+    return value / maxValue
+end
+
+-- ============================================================================
+-- Create
+-- ============================================================================
+function Create()
+    InSeed = self:AddInput("Random Seed", "Seed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 42,
+        INP_MinScale = 1,
+        INP_MaxScale = 9999
+    })
+    Inline1Separator_1 = self:AddInput("line1Separator", "line1Separator_1", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+    InWidth = self:AddInput("Width", "Width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 64,
+        INP_MaxScale = 2048,
+        INP_Default = 64,
+        INP_MinAllowed = 64,
+        INP_Integer = true,
+    })
+
+    InHeight = self:AddInput("Height", "Height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 64,
+        INP_MaxScale = 2048,
+        INP_Default = 64,
+        INP_Integer = true,
+    })
+
+    Inline1Separator_2 = self:AddInput("line1Separator", "line1Separator_2", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+    InOffsetX = self:AddInput("Offset X", "OffsetX", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+        INP_MinScale = -1.0,
+        INP_MaxScale = 1.0
+    })
+    InOffsetY = self:AddInput("Offset Y", "OffsetY", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+        INP_MinScale = -1.0,
+        INP_MaxScale = 1.0
+    })
+
+    InScale = self:AddInput("Noise Scale", "NoiseScale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 80,
+        INP_MinScale = 1,
+        INP_MaxScale = 300
+    })
+    Inline1Separator_3 = self:AddInput("line1Separator", "line1Separator_3", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+    -- Contour settings
+
+    InContourInterval = self:AddInput("Contour Interval", "ContourInterval", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.08,
+        INP_MinScale = 0.01,
+        INP_MinAllowed = 0.01,
+        -- INP_MaxAllowed = 1e+38,
+        INP_MaxScale = 0.5
+    })
+
+    InOctaves = self:AddInput("Noise Octaves", "Octaves", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 5,
+        INP_MinScale = 1,
+        INP_MinAllowed = 1,
+        INP_MaxScale = 8
+    })
+
+    InPersistence = self:AddInput("Persistence", "Persistence", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.6,
+        INP_MinScale = 0.1,
+        INP_MinAllowed = 0.1,
+        INP_MaxScale = 1.0
+    })
+    Inline1Separator_4 = self:AddInput("line1Separator", "line1Separator_4", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+    InAnimSpeed = self:AddInput("Animation Speed", "AnimSpeed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.1,
+        INP_MinScale = 0.0,
+        INP_MinAllowed = 0.0,
+        INP_MaxScale = 1.0
+    })
+    InTime = self:AddInput("Noise Time", "Time", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0,
+        INP_MinScale = 0,
+    })
+
+
+    OutScriptVal = self:AddOutput("ScriptVal Output", "ScriptValOutput", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 1
+    })
+    OutScriptValGroups = self:AddOutput("ScriptVal Groups", "ScriptValGroups", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 2
+    })
+end
+
+-- ============================================================================
+-- Process
+-- ============================================================================
+function Process(req)
+    local width = InWidth:GetValue(req).Value
+    local height = InHeight:GetValue(req).Value
+    local scale = InScale:GetValue(req).Value
+    local contourStep = InContourInterval:GetValue(req).Value
+    local octaves = InOctaves:GetValue(req).Value
+    local persistence = InPersistence:GetValue(req).Value
+    local seed = InSeed:GetValue(req).Value
+    local offsetX = InOffsetX:GetValue(req).Value
+    local offsetY = InOffsetY:GetValue(req).Value
+
+
+    -- Initialize noise
+    math.randomseed(seed)
+    initPermutation()
+
+    -- Build heightmap with fractal noise
+    -- Get current time for animation
+    local time = InTime:GetValue(req).Value
+    local speed = InAnimSpeed:GetValue(req).Value
+
+    local heightmap = {}
+    for y = 1, height do
+        heightmap[y] = {}
+        for x = 1, width do
+            heightmap[y][x] = fractalNoise(x + offsetX * 10, y + offsetY * 10, octaves, persistence, scale, time, speed)
+        end
+    end
+
+    -- Generate contour lines using marching squares (normalized coordinates)
+    local numLevels = math.floor(1.0 / contourStep)
+    local allSegments = {}
+    local pointSet = {}  -- To track unique points and avoid duplicates
+    local resultTableGroups = {}
+
+    for i = 1, numLevels do
+        local level = i * contourStep
+
+
+        -- Process each grid cell
+        for y = 1, height - 1 do
+            for x = 1, width - 1 do
+                local tl = heightmap[y][x]         -- top-left
+                local tr = heightmap[y][x + 1]     -- top-right
+                local bl = heightmap[y + 1][x]     -- bottom-left
+                local br = heightmap[y + 1][x + 1] -- bottom-right
+
+                local segments = getContourSegments(x, y, tl, tr, bl, br, level, width, height)
+
+                for _, segment in ipairs(segments) do
+
+
+                    if segment[1] and segment[2] then
+                        -- Create unique keys for points to avoid duplicates
+                        local key1 = string.format("%.6f,%.6f", segment[1][1], segment[1][2])
+                        local key2 = string.format("%.6f,%.6f", segment[2][1], segment[2][2])
+                        
+                        -- Add first point if not already present
+                        if not pointSet[key1] then
+                            pointSet[key1] = true
+                            table.insert(allSegments, { segment[1][1], segment[1][2], 0 })
+                        end
+                        
+                        -- Add second point if not already present
+                        if not pointSet[key2] then
+                            pointSet[key2] = true
+                            table.insert(allSegments, { segment[2][1], segment[2][2], 0 })
+                        end
+
+
+                    end
+                end
+            end
+        end
+    end
+    --table.insert(resultTableGroups, #pointSet)
+    OutScriptValGroups:Set(req, ScriptValParam(resultTableGroups))
+
+    OutScriptVal:Set(req, ScriptValParam(allSegments))
+end

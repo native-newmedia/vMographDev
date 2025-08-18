@@ -1,0 +1,332 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+local arrayutils = self and require("varrayutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "MidiVisualizer2D"
+DATATYPE = "Text"
+MAX_INPUTS = 24
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+  REGID_DataType      = DATATYPE,
+  REGID_InputDataType = DATATYPE,
+  REG_NoCommonCtrls   = true,
+  REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_Name           = FUSE_NAME,
+  REGS_OpDescription  = "Visualize MIDI JSON as 2D animation",
+  REGS_OpIconString   = FUSE_NAME,
+  REGS_IconID         = "Icons.Tools.Icons.TextPlus",
+  REG_TimeVariant     = true, -- required to disable caching of the current time parameter
+  REGB_Temporal       = true, -- ensures reliability in Resolve 15
+})
+
+function Create()
+  InJsonFile = self:AddInput("MIDI JSON File", "MidiJson", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "FileControl"
+  })
+
+  InBaseSize = self:AddInput("Base Size", "BaseSize", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.05,
+    INP_MinScale = 0.01,
+    INP_MaxScale = 1.0
+  })
+  InSequenceStartFrame = self:AddInput('Sequence Offset', 'SequenceStartFrame', {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    -- INPID_InputControl = "SliderControl",
+    -- TEC_Lines = 1,
+    INP_Integer = true,
+    INP_MinScale = -100,
+    INP_MaxScale = 100,
+    INP_Default = 0,
+    IC_Steps = 201,
+    INP_MinAllowed = -1e+38,
+    INP_MaxAllowed = 1e+38,
+    -- INP_MinAllowed = -1000000,
+    -- INP_MaxAllowed = 1000000,
+    LINK_Main = 1,
+  })
+  InPlaybackSpeed = self:AddInput("Playback Speed", "PlaybackSpeed", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 1.0,
+    INP_MinScale = 0.1, -- 10% speed
+    INP_MaxScale = 2.0, -- 200% speed
+    INP_Integer = false
+  })
+
+  InTempoScale = self:AddInput("Tempo Scale", "TempoScale", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 1.0,
+    INP_MinScale = 0.25,
+    INP_MaxScale = 4.0, -- 4x speed
+  })
+  InlongerNotes = self:AddInput("Longer Notes", "LongerNotes", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 0.25,
+    INP_MaxScale = 4.0, -- 4x speed
+    INP_Default = 1.0
+  })
+  InScale = self:AddInput("Scale", "Scale", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Integer = false,
+    INP_Default = 1.0,
+  })
+  InCenter = self:AddInput("Center", "Center", {
+    LINKID_DataType = "Point",
+    INPID_InputControl = "OffsetControl",
+    INPID_PreviewControl = "CrosshairControl",
+  }) -- longer  notes
+  InShowInput = self:AddInput("Show Input", "ShowInput", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "CheckboxControl",
+    INP_Integer = true,
+    INP_Default = 1.0,
+    INP_External = false,
+    INP_DoNotifyChanged = true,
+  })
+  InImage = self:AddInput("Input", "Input", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+  OutImage = self:AddOutput("Output", "Output", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1
+  })
+  OutScriptVal = self:AddOutput("ScriptVal", "ScriptVal", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 2
+  })
+end
+
+function NotifyChanged(inp, param, time)
+  --[[
+        Handles all input control events.
+
+        :param inp: Input that triggered a signal.
+        :type inp: Input
+
+        :param param: Parameter object holding the (new) value.
+        :type param: Parameter
+
+        :param time: Current frame number.
+        :type time: float
+    ]]
+
+  if inp == InShowInput then
+    local visible
+    if param.Value == 1.0 then visible = true else visible = false end
+
+    InSequenceStartFrame:SetAttrs({ LINK_Visible = visible })
+  end
+end
+
+function convertY(y, ref_img)
+  return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+function HSVtoRGB(h, s, v)
+  local r, g, b
+  local i = math.floor(h * 6)
+  local f = h * 6 - i
+  local p = v * (1 - s)
+  local q = v * (1 - f * s)
+  local t = v * (1 - (1 - f) * s)
+  i = i % 6
+
+  if i == 0 then
+    r, g, b = v, t, p
+  elseif i == 1 then
+    r, g, b = q, v, p
+  elseif i == 2 then
+    r, g, b = p, v, t
+  elseif i == 3 then
+    r, g, b = p, q, v
+  elseif i == 4 then
+    r, g, b = t, p, v
+  elseif i == 5 then
+    r, g, b = v, p, q
+  end
+
+  return r, g, b
+end
+
+function d_string(text, fontsize)
+  local spacer = 1.0
+
+  local mat = Matrix4()
+  local fontName = "Open Sans"
+  local style = "Bold"
+  local size = fontsize or 0.1
+
+  local font = TextStyleFont(fontName, style)
+  local tfm = TextStyleFontMetrics(font)
+
+  -- Start at origin
+  mat:Identity()
+  mat:Scale(1.0 / tfm.Scale, 1.0 / tfm.Scale, 1.0)
+  mat:Scale(size, size, 1)
+
+  local shape = Shape()
+  local x = 0
+  local line_width = 0
+  for i = 1, #text do
+    local ch = text:byte(i)
+    local chShape = tfm:GetCharacterShape(ch, false)
+    local chWidth = tfm:CharacterWidth(ch) * spacer
+
+    local chMat = Matrix4()
+    chMat:Identity()
+    chMat:Scale(1.0 / tfm.Scale, 1.0 / tfm.Scale, 1.0)
+    chMat:Scale(size, size, 1)
+    chMat:Move(x + chWidth / 2, 0, 0)
+
+    local transformed = chShape:TransformOfShape(chMat)
+    shape:AddShape(transformed)
+
+    x = x + chWidth
+    line_width = line_width + chWidth
+  end
+  mat:Identity()
+  mat:Move(-line_width / 2, 0, 0)
+  shape = shape:TransformOfShape(mat)
+
+  return shape
+end
+
+function Process(req)
+  -- Should the image sequence frame numbering be shifted (forwards/backwards) by the sequence offset value?
+  local sequenceStartFrame = tonumber(InSequenceStartFrame:GetValue(req).Value)
+
+  -- Note: If you need to iterate across a range of frames for a temporal effect use Req.Time.
+  -- Comp.CurrentTime will still report the current timeline frame when a time remapping effect is done.
+
+  local playbackSpeed = InPlaybackSpeed:GetValue(req).Value
+  local tempoScale = InTempoScale:GetValue(req).Value
+  local effectiveTime = ((tonumber(req.Time) + sequenceStartFrame) * (1.0 / playbackSpeed)) / tempoScale
+
+
+  local time = tonumber(self.Comp.CurrentTime) + sequenceStartFrame
+  local num = tonumber(req.Time) + sequenceStartFrame
+  local center = InCenter:GetValue(req)
+  local global_scale = InScale:GetValue(req).Value
+  local global_x = center.X
+  local global_y = center.Y
+
+  local img = InImage:GetValue(req)
+  local out = img:CopyOf()
+  img:Clear()
+
+  local ic = ImageChannel(out, 8) -- Image Channel
+  local fs = FillStyle()          -- Fill Style Object
+  local cs = ChannelStyle()       -- Channel Style
+  ic:SetStyleFill(fs)
+  local mat = Matrix4()           -- Matrix to transform the shapes
+
+
+  local rel_path = InJsonFile:GetValue(req).Value
+  local abs_path = self.Comp:MapPath(rel_path)
+
+  local json_str = jsonutils.read_json_string(abs_path)
+  local data = jsonutils.decode(json_str)
+
+
+  local notes = data.tracks[1].notes
+
+
+  local baseSize = InBaseSize:GetValue(req).Value
+
+
+  local durationScale = InlongerNotes:GetValue(req).Value -- 2x longer notes
+  --
+
+  for _, note in ipairs(notes) do
+    -- Check if the note is within the effective time range
+    if effectiveTime >= note.time and effectiveTime <= note.time + (note.duration * durationScale) then
+      -- Calculate note position and properties
+      local notePitch = note.midi % 12 -- Get semitone (0-11)
+      local x = notePitch / 12         -- Normalize to 0-1 range
+      local y = 0.5                    -- Base Y position
+      local age = (time - note.time) / note.duration
+      --local fade = 1.0 - age
+      local fade = 1.0 - ((effectiveTime - note.time) / (note.duration * tempoScale))
+
+      -- Scale based on velocity (0.7795275590551181 is the max in your data)
+      local velocityScale = note.velocity / 0.7795275590551181
+      local width = baseSize * 0.5 * velocityScale
+      local height = baseSize * velocityScale
+
+      -- Calculate color based on pitch
+      local hue = notePitch / 12
+      local r, g, b = HSVtoRGB(hue, 1.0, velocityScale) -- Use velocity for brightness
+
+      -- Create and position the rectangle
+      local sh = Shape()
+      sh:AddRectangle(
+        -width / 2,  -- left
+        width / 2,   -- right
+        -height / 2, -- top (we'll position this with the matrix)
+        height / 2,  -- bottom
+        0.01,        -- corner radius
+        8            -- precision
+      )
+
+      -- Transform matrix
+      mat:Identity()
+      --mat:Move(x + global_x, 0.25 + global_y, 0)
+      mat:Move(x + global_x, convertY(0.5, img), 0)
+      mat:Scale(global_scale, global_scale, 1.0)
+      -- Position based on pitch
+
+
+      -- Add text to the shape
+      local wordShape = d_string(note.name, 0.1)
+      local mat_txt = Matrix4(mat)
+      mat_txt:Identity()
+      mat_txt:Move(0, convertY(0.15, img), 0)
+      sh:AddShape(wordShape:TransformOfShape(mat_txt))
+
+      -- Add MIDI number text to the shape
+      local wordMidi = d_string(tostring(note.midi), 0.1)
+      mat_txt:Identity()
+      mat_txt:Move(0, convertY(-0.2, img), 0)
+      sh:AddShape(wordMidi:TransformOfShape(mat_txt))
+
+
+      local wordAge = d_string(tostring(math.floor(age * 100) / 100), 0.05)
+      mat_txt:Identity()
+      mat_txt:Move(0, convertY(-0.3, img), 0)
+      sh:AddShape(wordAge:TransformOfShape(mat_txt))
+      -- "velocity": 0.7795275590551181,
+      -- "midi": 53,
+      -- "time": 0.0,
+      -- "duration": 0.5)
+      local wordTime = d_string(tostring(note.time), 0.05)
+      mat_txt:Identity()
+      mat_txt:Move(0, convertY(-0.38, img), 0)
+      sh:AddShape(wordTime:TransformOfShape(mat_txt))
+
+
+      -- Set style and draw
+      cs.Color = Pixel { R = r, G = g, B = b, A = 1 } -- Slightly transparent
+      ic:SetStyleFill(fs)
+      ic:ShapeFill(sh:TransformOfShape(mat))
+      ic:PutToImage("CM_Merge", cs)
+    end
+    -- end
+  end
+
+  OutImage:Set(req, out)
+  OutScriptVal:Set(req, ScriptValParam(data))
+end

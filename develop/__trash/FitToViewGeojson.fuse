@@ -1,0 +1,289 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+local arrayutils = self and require("varrayutils") or nil
+
+-- ============================================================================
+
+FuRegisterClass("FitToViewGeoJSON", CT_Tool, {
+    REGID_DataType    = "GeoFit_001",
+    REG_OpIconString  = "F2V",
+    REGS_Category     = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REG_OpDescription = "Fit GeoJSON to view",
+    REG_OpName        = "FitToViewGeoJSON"
+})
+
+function Create()
+    InAutoFit = self:AddInput("Auto Fit", "InAutoFit", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Default = 1,
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+
+    InArray = self:AddInput("GeoJSON Array", "InArray", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1,
+    })
+
+    InMapZoomWidth = self:AddInput("Map Zoom Width", "InMapZoomWidth", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.1,
+        INP_MaxScale = 10.0,
+    })
+
+    InCenterLat = self:AddInput("Center Latitude", "InCenterLat", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.0,
+        INP_MinScale = -90.0,
+        INP_MaxScale = 90.0,
+    })
+
+    InCenterLon = self:AddInput("Center Longitude", "InCenterLon", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.0,
+        INP_MinScale = -180.0,
+        INP_MaxScale = 180.0,
+    })
+
+    InScale = self:AddInput("Scale", "InScale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.001,
+        INP_MaxScale = 100.0,
+    })
+
+    InOffsetX = self:AddInput("Offset X", "InOffsetX", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.0,
+        INP_MinScale = -10.0,
+        INP_MaxScale = 10.0,
+    })
+
+    InOffsetY = self:AddInput("Offset Y", "InOffsetY", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.0,
+        INP_MinScale = -10.0,
+        INP_MaxScale = 10.0,
+    })
+
+    OutData = self:AddOutput("Output", "OutData", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1
+    })
+    OutScriptVal = self:AddOutput("ScriptVal_Groups", "ScriptVal_Groups", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 2
+    })
+end
+
+function Process(req)
+    -- Input validation
+    local inArrText = InArray:GetValue(req)
+    if not inArrText or not inArrText.Value or inArrText.Value == "" then
+        OutData:Set(req, Text(jsonutils.encode({ array = {}, size = 0 })))
+        OutScriptVal:Set(req, ScriptValParam({}))
+        return
+    end
+
+    local inArr = jsonutils.decode(inArrText.Value)
+    if not inArr then
+        OutData:Set(req, Text(jsonutils.encode({ array = {}, size = 0 })))
+        OutScriptVal:Set(req, ScriptValParam({}))
+        return
+    end
+
+    local autoFit = InAutoFit:GetValue(req).Value == 1
+    local scale = InScale:GetValue(req).Value * 1000
+    local offsetX = InOffsetX:GetValue(req).Value
+    local offsetY = InOffsetY:GetValue(req).Value
+
+    local resultTable = {}
+    local resultTableGroups = {}
+
+    local function extract_coordinates(geojson)
+        local coordinates = {}
+
+        -- Handle different GeoJSON structures
+        if not geojson then
+            return coordinates
+        end
+
+        -- If it's a FeatureCollection
+        if geojson.type == "FeatureCollection" and geojson.features then
+            for _, feature in ipairs(geojson.features) do
+                local geometry = feature.geometry
+                if geometry then
+                    if geometry.type == "Point" then
+                        table.insert(coordinates, { geometry.coordinates })
+                    elseif geometry.type == "Polygon" then
+                        for _, polygon in ipairs(geometry.coordinates) do
+                            table.insert(coordinates, polygon)
+                        end
+                    elseif geometry.type == "MultiPolygon" then
+                        for _, multi_polygon in ipairs(geometry.coordinates) do
+                            for _, polygon in ipairs(multi_polygon) do
+                                table.insert(coordinates, polygon)
+                            end
+                        end
+                    elseif geometry.type == "LineString" then
+                        table.insert(coordinates, geometry.coordinates)
+                    elseif geometry.type == "MultiLineString" then
+                        for _, line in ipairs(geometry.coordinates) do
+                            table.insert(coordinates, line)
+                        end
+                    end
+                end
+            end
+            -- If it's just an array of coordinates
+        elseif type(geojson) == "table" and #geojson > 0 then
+            coordinates = geojson
+        end
+
+        return coordinates
+    end
+
+    local function get_bounds(coords)
+        if #coords == 0 then
+            return 0, 0, 0, 0
+        end
+
+        local minLat, maxLat = math.huge, -math.huge
+        local minLon, maxLon = math.huge, -math.huge
+
+        for _, shape in ipairs(coords) do
+            for _, pt in ipairs(shape) do
+                local lat, lon = pt[2], pt[1] -- GeoJSON is [lon, lat]
+                if lat < minLat then minLat = lat end
+                if lat > maxLat then maxLat = lat end
+                if lon < minLon then minLon = lon end
+                if lon > maxLon then maxLon = lon end
+            end
+        end
+
+        -- Handle case where all points are the same
+        if minLat == maxLat then
+            minLat = minLat - 0.01
+            maxLat = maxLat + 0.01
+        end
+        if minLon == maxLon then
+            minLon = minLon - 0.01
+            maxLon = maxLon + 0.01
+        end
+
+        return minLat, maxLat, minLon, maxLon
+    end
+
+    local function calcLon(lon, mapWidth)
+        return (lon + 180) * (mapWidth / 360)
+    end
+
+    local function calcLat(lat, mapWidth, mapHeight)
+        local latRad = lat * math.pi / 180
+        local mercN = math.log(math.tan((math.pi / 4) + (latRad / 2)))
+        return (mapHeight / 2) - (mapWidth * mercN / (2 * math.pi))
+    end
+
+    local function findCenter(coordinates)
+        if #coordinates == 0 then
+            return 0, 0
+        end
+
+        local sumX, sumY = 0, 0
+        for _, coord in ipairs(coordinates) do
+            sumX = sumX + coord[1]
+            sumY = sumY + coord[2]
+        end
+
+        return sumX / #coordinates, sumY / #coordinates
+    end
+
+    -- Extract coordinates from GeoJSON
+    local map_coordinates = extract_coordinates(inArr)
+
+    if #map_coordinates == 0 then
+        OutData:Set(req, Text(jsonutils.encode({ array = {}, size = 0 })))
+        OutScriptVal:Set(req, ScriptValParam({}))
+        return
+    end
+
+    -- Build result table and track group sizes
+    for i, shape in ipairs(map_coordinates) do
+        table.insert(resultTableGroups, #shape)
+        for _, coord in ipairs(shape) do
+            -- GeoJSON format is [longitude, latitude], we want [latitude, longitude]
+            table.insert(resultTable, { coord[2], coord[1] })
+        end
+    end
+
+    local centerLat, centerLon, mapZoom
+
+    --[[     if autoFit then
+        local minLat, maxLat, minLon, maxLon = get_bounds(map_coordinates)
+        centerLat = (minLat + maxLat) / 2
+        centerLon = (minLon + maxLon) / 2
+
+        -- Calculate bounding box in projected coordinates
+        local lat1 = calcLat(minLat, 1, 1)
+        local lat2 = calcLat(maxLat, 1, 1)
+        local lon1 = calcLon(minLon, 1)
+        local lon2 = calcLon(maxLon, 1)
+
+        local bboxWidth = math.abs(lon2 - lon1)
+        local bboxHeight = math.abs(lat2 - lat1)
+        mapZoom = math.max(bboxWidth, bboxHeight) * 1.1 -- Add 10% padding
+    else
+        mapZoom = InMapZoomWidth:GetValue(req).Value
+        centerLat = InCenterLat:GetValue(req).Value
+        centerLon = InCenterLon:GetValue(req).Value
+    end ]]
+
+    mapZoom = InMapZoomWidth:GetValue(req).Value
+    centerLat = InCenterLat:GetValue(req).Value
+    centerLon = InCenterLon:GetValue(req).Value
+
+    -- Project coordinates to screen space
+    local mapWidth = mapZoom
+    local mapHeight = 1
+    local centerX = calcLon(centerLon, mapWidth)
+    local centerY = calcLat(centerLat, mapWidth, mapHeight)
+
+    local newArray = {}
+    for _, coord in ipairs(resultTable) do
+        local lat = coord[1] -- Now correctly ordered as lat, lon
+        local lon = coord[2]
+        local x = calcLon(lon, mapWidth) - centerX
+        local y = -(calcLat(lat, mapWidth, mapHeight) - centerY) -- Negative to flip Y axis
+        table.insert(newArray, { x, y })
+    end
+
+    -- Apply center-based scaling and offset
+    if #newArray > 0 then
+        local centerPtX, centerPtY = findCenter(newArray)
+
+        for i, coord in ipairs(newArray) do
+            -- Scale from center point
+            local scaledX = centerPtX + (coord[1] - centerPtX) * scale + offsetX
+            local scaledY = centerPtY + (coord[2] - centerPtY) * scale + offsetY
+            newArray[i] = { scaledX, scaledY, 0 }
+        end
+    end
+
+
+    local out_Array = {
+        array = newArray,
+        size = #newArray
+    }
+
+    OutScriptVal:Set(req, ScriptValParam(resultTableGroups))
+    OutData:Set(req, Text(jsonutils.encode(out_Array)))
+end

@@ -1,0 +1,979 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local utf8 = require("utf8")
+local chance = require("chance")
+-- ============================================================================
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass("LetterTextPacker_V1", CT_Tool, {
+  REGS_Name          = "LetterTextPacker_V1",
+  REGS_Category      = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_OpIconString  = "LTPv1",
+  REGS_OpDescription = "Fills a letter shape with packed text using FitTo and custom input"
+})
+
+function Create()
+  InGlobalScale      = self:AddInput("GlobalScale", "globalScale", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.1,
+    INP_MinScale = 0.01,
+    INP_MaxScale = 1,
+  })
+  NumRects           = self:AddInput("Number of Rectangles", "NumRects", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 1,
+    INP_MaxScale = 1000,
+    INP_Default = 100,
+  })
+  InThickness        = self:AddInput("Thickness", "Thickness", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_MinScale = 0.0,
+    INP_MaxScale = 0.1,
+    INP_Default = 0.005,
+  })
+
+  InHori_adjustment  = self:AddInput("Horizontal Adjustment", "Hori_adjustment", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = -1,
+    INP_MaxScale = 1,
+    INP_Default = 0.0,
+    PC_ControlGroup = 1,
+    PC_ControlID = 3,
+  })
+  InVer_adjustment   = self:AddInput("Vertical Adjustment", "Ver_adjustment", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = -1,
+    INP_MaxScale = 1,
+    INP_Default = 0,
+    PC_ControlGroup = 1,
+    PC_ControlID = 4,
+  })
+  GridSize           = self:AddInput("Grid Size", "GridSize", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 100,
+    INP_MinScale = 20,
+    INP_MaxScale = 200,
+  })
+
+  FontSizeMin        = self:AddInput("Min Font Size", "FontSizeMin", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.03,
+    INP_MinScale = 0.01,
+    INP_MaxScale = 0.2,
+  })
+
+  FontSizeMax        = self:AddInput("Max Font Size", "FontSizeMax", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.1,
+    INP_MinScale = 0.01,
+    INP_MaxScale = 0.3,
+  })
+
+  -- FontName = self:AddInput("Font Name", "FontName", {
+  --   LINKID_DataType = "Text",
+  --   INPID_InputControl = "TextEditControl",
+  --   INP_Default = "Arial"
+  -- })
+  InFont             = self:AddInput("Font", "Font", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "FontFileControl",
+    IC_ControlGroup = 2,
+    IC_ControlID = 0,
+    INP_Level = 1,
+    INP_DoNotifyChanged = true,
+  })
+  InSize             = self:AddInput("Size", "Size", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_MinScale = 0.0,
+    INP_MaxScale = 10.0,
+    INP_Default = 1.0,
+  })
+
+  InFontStyle        = self:AddInput("Style", "Style", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "FontFileControl",
+    IC_ControlGroup = 2,
+    IC_ControlID = 1,
+    INP_Level = 1,
+    INP_DoNotifyChanged = true,
+  })
+  InCharacterSpacing = self:AddInput("Character Spacing", "CharacterSpacing", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Default = 0.05,
+    INP_Integer = false,
+  })
+  InLineSpacing      = self:AddInput("line Spacing", "lineSpacing", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_Integer = false,
+
+  })
+  InFitScale         = self:AddInput("Fit Scale ", "FitScale", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "CheckboxControl",
+    INP_DoNotifyChanged = true,
+    INP_Integer = true,
+    INP_Default = 0,
+    ICD_Width = 1,
+  })
+
+  InR                = self:AddInput("Red", "Red", {
+    ICS_Name           = "Color",
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 1.0,
+    INP_MaxScale       = 1.0,
+    CLRC_ShowWheel     = false,
+    IC_ControlGroup    = 2,
+    IC_ControlID       = 0,
+  })
+  InG                = self:AddInput("Green", "Green", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.9,
+    IC_ControlGroup    = 2,
+    IC_ControlID       = 1,
+  })
+  InB                = self:AddInput("Blue", "Blue", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.6,
+    IC_ControlGroup    = 2,
+    IC_ControlID       = 2,
+  })
+
+  InFade             = self:AddInput("Fade Color", "Fade", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ScrewControl",
+    INP_MinAllowed = 0.0001,
+    INP_MaxAllowed = 1.0,
+    INP_Default = 0.1,
+  })
+
+  InR_txt            = self:AddInput("Red", "Red_txt ", {
+    ICS_Name           = "Color",
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 1.0,
+    INP_MaxScale       = 1.0,
+    CLRC_ShowWheel     = false,
+    IC_ControlGroup    = 3,
+    IC_ControlID       = 0,
+  })
+  InG_txt            = self:AddInput("Green", "Green_txt", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.9,
+    IC_ControlGroup    = 3,
+    IC_ControlID       = 1,
+  })
+  InB_txt            = self:AddInput("Blue", "Blue_txt", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.6,
+    IC_ControlGroup    = 3,
+    IC_ControlID       = 2,
+  })
+
+  InR_bg             = self:AddInput("Red", "Red_bg ", {
+    ICS_Name           = "Color",
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 1.0,
+    INP_MaxScale       = 1.0,
+    CLRC_ShowWheel     = false,
+    IC_ControlGroup    = 4,
+    IC_ControlID       = 0,
+  })
+  InG_bg             = self:AddInput("Green", "Green_bg", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.9,
+    IC_ControlGroup    = 4,
+    IC_ControlID       = 1,
+  })
+  InB_bg             = self:AddInput("Blue", "Blue_bg", {
+    LINKID_DataType    = "Number",
+    INPID_InputControl = "ColorControl",
+    INP_Default        = 0.6,
+    IC_ControlGroup    = 4,
+    IC_ControlID       = 2,
+  })
+
+  -- WordList=self:AddInput("Words (comma-separated)", "WordList", {
+  --   LINKID_DataType = "Text",
+  --   INPID_InputControl = "TextEditControl",
+  --   INP_Default = "Fusion,Tools,Node,Lua,Sora,Text,Pack,Design,Script,Flow,Render"
+  -- })
+
+  WordList           = self:AddInput("Text", "Text", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    TEC_Lines = 1,
+    --INP_Default = "Fusion,Tools,Node,Lua,Sora,Text,Pack,Design,Script,Flow,Render"
+  })
+
+  InImage            = self:AddInput("Input", "Input", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+  InScriptValText    = self:AddInput("ScriptVal Text", "ScriptValtext", {
+    LINKID_DataType = "ScriptVal",
+    LINK_Main = 2,
+  })
+  OutScriptValData   = self:AddOutput("OutputValData", "OutputValData", {
+    LINKID_DataType = 'ScriptVal',
+    LINK_Main = 2,
+  })
+
+  Output             = self:AddOutput("Output", "Output", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+end
+
+-- Custom utf8.offset function
+function utf8_offset(s, n)
+  local pos = 1
+  for i = 1, n - 1 do
+    pos = pos + utf8_charbytes(s, pos)
+  end
+  return pos
+end
+
+-- Custom utf8.charbytes function
+function utf8_charbytes(s, i)
+  local c = string.byte(s, i)
+  if c > 0 and c <= 127 then
+    return 1
+  elseif c >= 194 and c <= 223 then
+    return 2
+  elseif c >= 224 and c <= 239 then
+    return 3
+  elseif c >= 240 and c <= 244 then
+    return 4
+  end
+end
+
+-- Custom utf8.codepoint function
+function utf8_codepoint(s, i)
+  local c = string.byte(s, i)
+  if c <= 127 then
+    return c
+  elseif c >= 194 and c <= 223 then
+    local c2 = string.byte(s, i + 1)
+    return (c - 192) * 64 + (c2 - 128)
+  elseif c >= 224 and c <= 239 then
+    local c2 = string.byte(s, i + 1)
+    local c3 = string.byte(s, i + 2)
+    return (c - 224) * 4096 + (c2 - 128) * 64 + (c3 - 128)
+  elseif c >= 240 and c <= 244 then
+    local c2 = string.byte(s, i + 1)
+    local c3 = string.byte(s, i + 2)
+    local c4 = string.byte(s, i + 3)
+    return (c - 240) * 262144 + (c2 - 128) * 4096 + (c3 - 128) * 64 + (c4 - 128)
+  end
+end
+
+---Version 01
+-- Function to get a font based on probability
+function getRandomFont(fontArray)
+  -- Count enabled fonts and normalize probabilities
+  local enabledFonts = {}
+  local totalProbability = 0
+
+  for i, fontInfo in ipairs(fontArray.Fonts) do
+    if fontInfo.Enabled then
+      table.insert(enabledFonts, fontInfo)
+      -- Default to equal probability if not specified
+      fontInfo.Probability = fontInfo.Probability or (1 / fontArray.EnabledFontCount)
+      totalProbability = totalProbability + fontInfo.Probability
+    end
+  end
+
+  -- Normalize probabilities if they don't sum to 1
+  if math.abs(totalProbability - 1.0) > 0.001 then
+    for _, fontInfo in ipairs(enabledFonts) do
+      fontInfo.Probability = fontInfo.Probability / totalProbability
+    end
+  end
+
+  -- Select a font based on probability
+  local randomValue = math.random()
+  local cumulativeProbability = 0
+
+  for _, fontInfo in ipairs(enabledFonts) do
+    cumulativeProbability = cumulativeProbability + fontInfo.Probability
+    if randomValue <= cumulativeProbability then
+      return fontInfo
+    end
+  end
+
+  -- Fallback to first enabled font if something goes wrong
+  return enabledFonts[1]
+end
+
+function createText_Background(text, align, fontsize, char_spacing, hori_adjustment, ver_adjustment,
+                               box_padding, box_adjustment, roundCorners, background)
+  local fontArray = {
+    EnabledFontCount = 6,
+    FontSize = 0.0312,
+    Fonts = {
+      {
+        Index = 1,
+        Size = 0.0312,
+        Font = "Open Sans",
+        Enabled = true,
+        Style = "Regular",
+        Probability = 0.3 -- 30% chance
+      },
+      {
+        Index = 2,
+        Size = 0.0312,
+        Font = "Alegreya",
+        Enabled = false,
+        Style = "Regular",
+        Probability = 0.2 -- 20% chance
+      },
+      {
+        Index = 3,
+        Size = 0.0312,
+        Font = "Almendra",
+        Enabled = false,
+        Style = "Bold Italic",
+        Probability = 0.15 -- 15% chance
+      },
+      {
+        Index = 4,
+        Size = 0.0312,
+        Font = "Apple SD Gothic Neo",
+        Enabled = false,
+        Style = "Regular",
+        Probability = 0.15 -- 15% chance
+      },
+      {
+        Index = 5,
+        Size = 0.0312,
+        Font = "Chalkboard SE",
+        Enabled = false,
+        Style = "Regular",
+        Probability = 0.1 -- 10% chance
+      },
+      {
+        Index = 6,
+        Size = 0.0312,
+        Font = "Gotham XLight",
+        Enabled = false,
+        Style = "Regular",
+        Probability = 0.1 -- 10% chance
+      }
+    },
+    TotalFonts = 6
+  }
+
+
+
+  local shape = Shape()
+  local shapeBase = Shape()
+  local mat = Matrix4()
+  local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+
+
+
+
+  local function updateBounds(point)
+    if point.x < minX then minX = point.x end
+    if point.y < minY then minY = point.y end
+    if point.x > maxX then maxX = point.x end
+    if point.y > maxY then maxY = point.y end
+  end
+
+  local function applyJustification(mat, justify, line_width)
+    if justify == 1 then
+      mat:Move(-line_width / 2, 0, 0)
+    elseif justify == 2 then
+      mat:Move(-line_width, 0, 0)
+    end
+  end
+
+  -- Pre-calculate line heights for vertical positioning
+  local lines = {}
+  for line in string.gmatch(text, "[^\r\n]+") do
+    table.insert(lines, line)
+  end
+
+  local total_height = 0
+  local line_heights = {}
+
+  -- Calculate total height using average metrics for estimation
+  local refFontInfo = fontArray.Fonts[1]
+  local refMetrics = TextStyleFont(refFontInfo.Font, refFontInfo.Style)
+  local refTfm = TextStyleFontMetrics(refMetrics)
+  local avg_line_height = (refTfm.TextAscent + refTfm.TextDescent + refTfm.TextExternalLeading) * 10 * fontsize
+
+  for _ in ipairs(lines) do
+    table.insert(line_heights, avg_line_height)
+    total_height = total_height + avg_line_height
+  end
+
+  local vertical_offset = ((total_height / 2) - ((refTfm.TextAscent + refTfm.TextDescent) * fontsize / 2)) / 4
+
+  mat:Move(0, 0, 0)
+
+  -- Process each line
+  for line_idx, line in ipairs(lines) do
+    local line_width = 0
+    local char_positions = {}
+    local char_fonts = {}
+
+    -- First pass: calculate positions and select fonts for each character
+    for i = 1, utf8.len(line) do
+      -- Select a random font for this character
+      local selectedFont = getRandomFont(fontArray)
+      char_fonts[i] = selectedFont
+
+      local fontMetrics = TextStyleFont(selectedFont.Font, selectedFont.Style)
+      local tfm = TextStyleFontMetrics(fontMetrics)
+      local size = fontsize
+
+      local ch = utf8_codepoint(line, utf8_offset(line, i)) or utf8_codepoint(" ")
+      local charWidth = tfm:CharacterWidth(ch) * (10 + char_spacing) * size
+
+      char_positions[i] = {
+        width = charWidth,
+        tfm = tfm,
+        size = size,
+        cp = ch
+      }
+
+      line_width = line_width + charWidth
+    end
+
+    -- Apply justification for this line
+    applyJustification(mat, align, line_width)
+
+    -- Second pass: render each character with its selected font
+    local x_move = 0
+
+    for i = 1, utf8.len(line) do
+      local char_info = char_positions[i]
+      local fontInfo = char_fonts[i]
+      local ch = char_info.cp
+      local cw = char_info.width
+      local tfm = char_info.tfm
+      local size = char_info.size
+
+
+      -- Calculate kerning if not the first character
+      if i > 1 then
+        local prev_char = char_positions[i - 1]
+        local kerning = tfm:CharacterKerning(prev_char.cp, ch) * (10 + char_spacing) * size
+        x_move = x_move + kerning
+        mat:Move(kerning, 0, 0)
+      end
+
+      mat:Move(cw / 2, 0, 0)
+
+      if ch ~= 32 then -- Skip spaces
+        local char_mat = Matrix4(mat)
+
+        char_mat:Scale((1.0 / tfm.Scale) * size, (1.0 / tfm.Scale) * size, 1.0)
+        char_mat:Move(x_move + (cw / 2), 0, 0)
+
+        local sh = tfm:GetCharacterShape(ch, false):TransformOfShape(char_mat)
+        shape:AddShape(sh)
+
+        local transformedPoint = Vector4(0, 0, 0, 1) * mat
+        updateBounds(transformedPoint)
+      end
+
+
+      mat:Move(cw / 2, 0, 0)
+      x_move = x_move + cw
+    end
+
+    -- Move to next line
+    mat:Move(-x_move, 0, 0)
+    shape = shape:TransformOfShape(mat)
+    mat:Move(-x_move, -line_heights[line_idx], 0)
+  end
+
+  -- Create background if needed
+  local padding = box_padding * fontsize
+  local rect = Shape()
+  local shapeTable = {}
+  --if background == 1 then
+  rect:AddRectangle(minX - padding, maxX + padding, minY - padding, maxY + padding, roundCorners, 8)
+  --else
+  --end
+
+  local _height = (-(maxY + padding) / 2) + box_adjustment
+  local _width = (-(maxX + padding) / 2) + box_adjustment
+
+  mat:Identity()
+  mat:Move(0, _height, 0)
+  mat:Move(hori_adjustment, ver_adjustment, 0)
+  shape = shape:TransformOfShape(mat)
+
+  mat:Identity()
+  mat:Move(0, 0, 0)
+  rect = rect:TransformOfShape(mat)
+  shapeTable = { rect, shape, text, math.abs(_width), math.abs(_height) }
+
+  return shapeTable
+  --return shape
+end
+
+-- Utility: Normalize points to grid
+function normalize_points(points, grid_size)
+  local min_x, max_x = math.huge, -math.huge
+  local min_y, max_y = math.huge, -math.huge
+  for _, p in ipairs(points) do
+    min_x = math.min(min_x, p[1])
+    max_x = math.max(max_x, p[1])
+    min_y = math.min(min_y, p[2])
+    max_y = math.max(max_y, p[2])
+  end
+  local dx, dy = max_x - min_x, max_y - min_y
+  local norm = {}
+  for _, p in ipairs(points) do
+    local x = math.floor(((p[1] - min_x) / dx) * (grid_size - 1)) + 1
+    local y = (math.floor(((p[2] - min_y) / dy) * (grid_size - 1)) + 1)
+    table.insert(norm, { x = x, y = y })
+  end
+  return norm
+end
+
+-- ============================================================================
+-- =============3. Advanced Packing Algorithm==================================
+-- ============================================================================
+
+
+-- Fill polygon using scanline method
+function fill_polygon(norm_points, grid_size)
+  local shape = {}
+  for y = 1, grid_size do
+    shape[y] = {}
+    for x = 1, grid_size do shape[y][x] = false end
+  end
+
+  for y = 1, grid_size do
+    local intersections = {}
+    for i = 1, #norm_points do
+      local a = norm_points[i]
+      local b = norm_points[(i % #norm_points) + 1]
+      if a.y ~= b.y then
+        local y_min, y_max = math.min(a.y, b.y), math.max(a.y, b.y)
+        if y >= y_min and y < y_max then
+          local t = (y - a.y) / (b.y - a.y)
+          local x = a.x + t * (b.x - a.x)
+          table.insert(intersections, x)
+        end
+      end
+    end
+    table.sort(intersections)
+    for i = 1, #intersections, 2 do
+      local x_start = math.floor(intersections[i] or 0)
+      local x_end = math.ceil(intersections[i + 1] or 0)
+      for x = x_start, x_end do
+        if x >= 1 and x <= grid_size then shape[y][x] = true end
+      end
+    end
+  end
+  return shape
+end
+
+function can_fit(shape, x, y, w, h)
+  for dy = 0, h - 1 do
+    for dx = 0, w - 1 do
+      if not shape[y + dy] or not shape[y + dy][x + dx] then return false end
+    end
+  end
+  return true
+end
+
+function mark_used(shape, x, y, w, h)
+  for dy = 0, h - 1 do
+    for dx = 0, w - 1 do shape[y + dy][x + dx] = false end
+  end
+end
+
+function pack_rectangles(shape, grid_size, count, textTbl)
+  local packed = {}
+  for i = 1, count do
+    -- local w = math.random(6, 10)
+    -- local h = math.random(4, 7)
+
+    --{ rect, shape, text, math.abs(_width), math.abs(_height) }
+    --print(i, "-----", textTbl[i][4], textTbl[i][5])
+
+    local textItem = textTbl[i % #textTbl + 1]
+    local w = textItem[4] * 5
+    local h = textItem[5] * 10
+    -- Randomly choose rotation before packing
+    local rotated = math.random(1, 4) == 1
+    w = w or 0 -- Ensure w has a default value
+    h = h or 0 -- Ensure h has a default value
+    -- local rw, rh = rotated and w or w, rotated and h or h
+    local rw, rh = w, h
+
+    -- Adjust rectangle dimensions to fit within grid boundaries
+    rw = math.min(rw, grid_size)
+    rh = math.min(rh, grid_size)
+
+    -- Ensure the rectangle dimensions are at least 1x1
+    rw = math.max(rw, 1)
+    rh = math.max(rh, 1)
+
+
+
+    -- ==================Check this --->
+    -- Add a rectangle shape
+    -- Example rectangle from (0, 0) to (1, 1)
+    --rectShape:AddRectangle(-0.1, 0.1, -0.1, 0.1, 0, 16)
+    -- Left, Right, Top, Bottom, Corner radius, Precision
+
+
+
+    for y = 1, grid_size - rh do
+      for x = 1, grid_size - rw do
+        if can_fit(shape, x, y, rw, rh) then
+          -- Add a rectangle shape
+          local rectShape = Shape()
+          rectShape:AddRectangle(0, w, 0, h, 0, 8)
+          rectShape = rectShape:OutlineOfShape(0.05, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+
+          table.insert(packed, {
+            x = x,
+            y = y,
+            w = rw,
+            h = rh,
+            origW = w,
+            origH = h,
+            rotated = rotated,
+            rectShape = rectShape
+          })
+          mark_used(shape, x, y, rw, rh)
+          goto next_rect
+        end
+      end
+    end
+    ::next_rect::
+  end
+  return packed
+end
+
+-- ============================================================================
+
+function convertY(y, ref_img)
+  return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+-- Function to translate and flip a single shape by an offset on the x-axis
+function translateAndFlipShape(shape, offsetX)
+  local translatedShape = {}
+
+  for _, line in ipairs(shape) do
+    local translatedLine = {}
+    for i = 1, #line, 2 do
+      local x = line[i] + offsetX
+      local y = 1 - line[i + 1] -- Invert the y-coordinate to flip vertically
+      table.insert(translatedLine, x)
+      table.insert(translatedLine, y)
+    end
+    table.insert(translatedShape, translatedLine)
+  end
+
+  return translatedShape
+end
+
+function Process(req)
+  local img          = InImage:GetValue(req)
+  local out          = img:CopyOf()
+  local grid_size    = math.floor(GridSize:GetValue(req).Value)
+  local minFont      = FontSizeMin:GetValue(req).Value
+  local maxFont      = FontSizeMax:GetValue(req).Value
+  local fontName     = InFont:GetValue(req).Value
+  local wordStr      = "Fusion,Tools,Node,Lua,Sora,Text,Pack,Design,Script,Flow,Render"
+  local words        = {}
+  local globalScale  = InGlobalScale:GetValue(req).Value
+  local _wordslist   = WordList:GetValue(req).Value
+
+  local font         = InFont:GetValue(req).Value
+  local style        = InFontStyle:GetValue(req).Value
+  local size         = InSize:GetValue(req).Value
+  local textData     = InScriptValText:GetValue(req):GetValue() or {}
+
+  local char_spacing = InCharacterSpacing:GetValue(req).Value
+  local line_spacing = InLineSpacing:GetValue(req).Value
+
+
+  local thickness = InThickness:GetValue(req).Value
+
+  local numRects  = NumRects:GetValue(req).Value
+
+  local ic        = ImageChannel(out, 8)
+  local fs        = FillStyle()
+  local cs        = ChannelStyle()
+  local mat       = Matrix4()
+  ic:SetStyleFill(fs)
+
+
+
+  local r           = InR:GetValue(req).Value
+  local g           = InG:GetValue(req).Value
+  local b           = InB:GetValue(req).Value
+  local fade        = 1.0 - InFade:GetValue(req).Value
+  local r_txt       = InR_txt:GetValue(req).Value
+  local g_txt       = InG_txt:GetValue(req).Value
+  local b_txt       = InB_txt:GetValue(req).Value
+
+  local r_bg        = InR_bg:GetValue(req).Value
+  local g_bg        = InG_bg:GetValue(req).Value
+  local b_bg        = InB_bg:GetValue(req).Value
+  local fit         = InFitScale:GetValue(req).Value
+
+  local hori_adjust = InHori_adjustment:GetValue(req).Value
+  local ver_adjust  = InVer_adjustment:GetValue(req).Value
+
+
+  mat:Identity()
+  --mat:Scale(globalScale, globalScale, 1.0)
+  --mat:RotZ(0)
+  --mat:Move(0.5, convertY(0.5, img), 0)
+
+  -- ============================================================================
+  -- ================1. Core Data Structures=====================================
+  -- ============================================================================
+
+
+
+  if not next(FontManager:GetFontList()) then
+    FontManager:ScanDir()
+  end
+
+  if req:IsQuick() then
+    quality = 1
+  end
+
+  local shapeHolder = Shape()
+  --shapeHolder = shapeHolder:TransformOfShape(mat)
+
+  -- ============================================================================
+  -- =============2. Word Processing and Shape Generation========================
+  -- ============================================================================
+
+
+  for word in string.gmatch(wordStr, "([^,%s]+)") do
+    table.insert(words, word)
+  end
+
+  local textTbl = {}
+
+  for i = 1, numRects do
+    local textStr = words[i % #words + 1]
+    local textTblItem = createText_Background(textStr, 0, size, 0, 0, 0, 0.4, 0, 0, 1)
+    table.insert(textTbl, textTblItem)
+  end
+
+
+
+
+  local txtflipped = (translateAndFlipShape(textData, 0))
+
+  local norm = normalize_points(txtflipped, grid_size)
+  local shapeGrid = fill_polygon(norm, grid_size)
+  local packed = pack_rectangles(shapeGrid, grid_size, numRects, textTbl)
+
+  --dump(packed)
+
+  local words = {
+    "Passion", "Design", "Fusion", "Node", "Tool", "Code",
+    "Love", "Sora", "GPU", "Render", "AI", "Data", "Flow"
+  }
+  local letterShapes = {
+    {
+      points = textData,
+      position = { hori_adjust, ver_adjust }
+    }
+  }
+
+
+
+
+
+  mat:Identity()
+  mat:Scale(globalScale, globalScale, 1.0)
+  mat:Move(0.5, convertY(0.5, img), 0)
+  mat:Move(hori_adjust, ver_adjust, 0)
+
+
+  for i, rect in ipairs(packed) do
+    local textStr = words[i % #words + 1]
+
+
+    local fx = ((rect.x / grid_size) * 2 - 1)
+    local fy = (1 - (rect.y / grid_size) * 2)
+    local fw = (rect.w / grid_size) * 2
+    local fh = (rect.h / grid_size) * 2
+
+
+    local textItem   = textTbl[i][2]
+    local textItemBg = textTbl[i][1]
+
+    local textShape  = Shape()
+    textShape:AddRectangle(fx, fx + fw, fy, fy + fh, 0, 8)
+    textShape = textShape:OutlineOfShape(thickness, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8) -- Make the shape an outline
+
+    -- Something is fishy herererererererere------------------->>>
+    local margin = line_spacing -- 5% padding
+
+    if rect.rotated then
+      local mx     = fw * margin
+      local my     = fh * margin
+      local left   = fx + mx
+      local right  = fx + fw - mx
+      local top    = fy
+      local bottom = fy - fh + my
+
+
+
+      textItem:FitTo(left, bottom, right, top, fit)
+      textItemBg:FitTo(left, bottom, right, top, fit)
+      textItemBg = textItemBg:OutlineOfShape(thickness, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+      textShape:FitTo(left, bottom, right, top, fit)
+
+
+
+
+      local cx = fx + fw / 2
+      local cy = fy - fh / 2
+
+      local m = Matrix4()
+      m:Identity()
+      --m:Move(-cx, -cy, 0)
+      --m:RotZ(90)
+      --m:Move(cx, cy, 0)
+
+      textShape  = textShape:TransformOfShape(m)
+      textItemBg = textItemBg:TransformOfShape(m)
+      textItem   = textItem:TransformOfShape(m)
+
+      -- Apply margin
+      --[[   local mx     = fh * margin -- Adjusted for rotated rectangle
+      local my     = fw * margin -- Adjusted for rotated rectangle
+      local left   = fx
+      local right  = fx + fh - my
+      local top    = fy - mx
+      local bottom = fy - fh + mx ]]
+    else
+      -- Apply margin
+      local mx     = fw * margin
+      local my     = fh * margin
+      local left   = fx + mx
+      local right  = fx + fw - mx
+      local top    = fy
+      local bottom = fy - fh + my
+
+
+      textItem:FitTo(left, bottom, right, top, fit)
+      textItemBg:FitTo(left, bottom, right, top, fit)
+      textItemBg = textItemBg:OutlineOfShape(thickness, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+      textShape:FitTo(left, bottom, right, top, fit)
+    end
+
+
+
+
+
+
+    --textShape:AddShape(rect.rectShape:TransformOfShape(mat))
+
+
+
+
+
+
+
+    cs.Color = Pixel({ R = r_bg, G = g_bg, B = b_bg, A = 1 })
+    ic:SetStyleFill(fs)
+    ic:ShapeFill(textItemBg:TransformOfShape(mat))
+    ic:PutToImage("CM_Merge", cs)
+
+
+
+
+
+
+
+
+
+
+
+
+    cs.Color = Pixel({ R = r_txt, G = g_txt, B = b_txt, A = 1 })
+    ic:SetStyleFill(fs)
+    ic:ShapeFill(textItem:TransformOfShape(mat))
+    ic:PutToImage("CM_Merge", cs)
+
+
+
+
+
+
+    --  shapeHolder:AddShape(textShape)
+
+
+    cs.Color = Pixel({ R = r, G = g, B = b, A = 1 })
+    ic:SetStyleFill(fs)
+    ic:ShapeFill(textShape:TransformOfShape(mat))
+    ic:PutToImage("CM_Merge", cs)
+  end
+
+
+  --mat:Scale(globalScale, globalScale, 1.0)
+
+
+
+
+
+
+
+
+  Output:Set(req, out)
+  OutScriptValData:Set(req, ScriptValParam(packed))
+end
+
+function NotifyChanged(inp, param, time)
+  -- when the tools FontFileControl is first created, the FontManager has not yet
+  -- provided a FontList, so we can't set a default value. Instead we do it here.
+  if inp == InFont then
+    local f = param.Value
+
+    if f == nil or string.len(f) == 0 then
+      InFont:SetSource(Text("Open Sans"), time)
+    end
+  elseif inp == InFontStyle then
+    local f = param.Value
+
+    if f == nil or string.len(f) == 0 then
+      InFontStyle:SetSource(Text("Regular"), time)
+    end
+  end
+
+  if inp == InShowInput then
+    if param.Value == 1.0 then visible = true else visible = false end
+  end
+end

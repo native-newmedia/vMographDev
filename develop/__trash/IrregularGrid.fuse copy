@@ -1,0 +1,801 @@
+-- =========================================================================
+-- modules
+-- =========================================================================
+local jsonutils = self and require("vjsonutils") or nil
+--https://www.gorillasun.de/blog/an-algorithm-for-irregular-grids/
+
+-- =========================================================================
+-- constants
+-- =========================================================================
+
+FUSE_NAME = "IrregularGrid"
+DATATYPE = "Image"
+
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Irregular Grid with shapes, animation, colors, export, and recursion",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.TextPlus",
+    REG_TimeVariant = true,
+    REGB_Temporal = true,
+    REG_Version = 1,
+})
+
+-- Variables
+local bools = {}
+local rectInfo = {}
+
+function Create()
+    InSeed = self:AddInput("Random Seed", "Seed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        TEC_Lines = 1,
+        INP_MinScale = -100,
+        INP_MaxScale = 100,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+        INP_Default = 0,
+        INP_Integer = true,
+    })
+
+    Inline1Separator_1 = self:AddInput("line1Separator", "line1Separator_1", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InGridDivsX = self:AddInput("Grid Divisions X", "GridDivsX", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 15,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 100,
+        INP_Integer = true,
+    })
+
+    InGridDivsY = self:AddInput("Grid Divisions Y", "GridDivsY", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 15,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 100,
+        INP_Integer = true,
+    })
+
+    Inline1Separator_2 = self:AddInput("line1Separator", "line1Separator_2", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InRectSizeMin = self:AddInput("Rect Size Min", "RectSizeMin", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 2,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 10,
+        INP_Integer = true,
+    })
+
+    InRectSizeMax = self:AddInput("Rect Size Max", "RectSizeMax", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 3,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 10,
+        INP_Integer = true,
+    })
+
+    InSmallSize = self:AddInput("Small Rect Size", "SmallSize", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 10,
+        INP_Integer = true,
+    })
+
+    Inline1Separator_3 = self:AddInput("line1Separator", "line1Separator_3", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InCanvasWidth = self:AddInput("Canvas Width", "CanvasWidth", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1,
+        INP_MinScale = 0,
+        INP_MaxScale = 1,
+    })
+
+    InCanvasHeight = self:AddInput("Canvas Height", "CanvasHeight", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.5,
+        INP_MinScale = 0,
+        INP_MaxScale = 1,
+    })
+
+    Inline1Separator_4 = self:AddInput("line1Separator", "line1Separator_4", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InCenter = self:AddInput("Center", "Center", {
+        LINKID_DataType = "Point",
+        INPID_InputControl = "OffsetControl",
+        INPID_PreviewControl = "CrosshairControl",
+        INP_DefaultX = 0.0,
+        INP_DefaultY = 0.0,
+    })
+
+    InScale = self:AddInput("Scale", "Scale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+    })
+   Inline1Separator_4_1 = self:AddInput("line1Separator", "line1Separator_4_1", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InRandomizeDuplicates = self:AddInput("Randomize Duplicates", "RandomizeDuplicates", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "CheckboxControl",
+    INP_Default = 0,
+    INP_External = false,
+})
+
+    InScroll = self:AddInput("Scroll Grid", "ScrollGrid", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        TEC_Lines = 1,
+        INP_MinScale = -100,
+        INP_MaxScale = 100,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+        INP_Default = 0,
+        INP_Integer = true,
+    })
+
+    Inline1Separator_5 = self:AddInput("line1Separator", "line1Separator_5", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InTrim = self:AddInput("Trim", "Trim", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        MBTNC_ShowName = false,
+        { MBTNC_AddButton = "None", MBTNCD_ButtonWidth = 0.5 },
+        { MBTNC_AddButton = "Trim", MBTNCD_ButtonWidth = 0.5 },
+        INP_DoNotifyChanged = true,
+    })
+
+    InTrimMode = self:AddInput("Trim Mode", "TrimMode", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ComboControl",
+        INP_Default = 0,
+        INP_Integer = true,
+        { CCS_AddString = "First" },
+        { CCS_AddString = "Last" },
+        { CCS_AddString = "Random" },
+        { CCS_AddString = "Range Selection" },
+        INP_DoNotifyChanged = true,
+    })
+
+    InTrimCount = self:AddInput("Trim Rect Count", "TrimCount", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 500,
+        INP_MinScale = 1,
+        INP_MaxScale = 500,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 1000,
+        INP_Integer = true,
+    })
+
+    InTrimLow = self:AddInput("", "Low", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "RangeControl",
+        INP_Default = 1,
+        INP_MinAllowed = 1,
+        INP_MaxScale = 50,
+        IC_ControlGroup = 200,
+        IC_ControlID = 0,
+        INP_Integer = true,
+        RNGCS_MidName = "I<  Range Selection  >I",
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InTrimHigh = self:AddInput("", "High", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "RangeControl",
+        INP_Default = 50,
+        INP_MinAllowed = 1,
+        INP_MaxScale = 50,
+        IC_ControlGroup = 200,
+        IC_ControlID = 1,
+        INP_Integer = true,
+    })
+
+    InTrimOffset = self:AddInput("Trim Range offset", "TrimOffset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1,
+        INP_MinScale = 1,
+        INP_MaxScale = 500,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 1000,
+        INP_Integer = true,
+    })
+    self:BeginControlNest("Line Style", "Line_style", false, {})
+
+    InOutline = self:AddInput("Outline Shape", "Outline", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        MBTNC_ShowName = false,
+        { MBTNC_AddButton = "Outline", MBTNCD_ButtonWidth = 0.33 },
+        { MBTNC_AddButton = "Solid",   MBTNCD_ButtonWidth = 0.33 },
+        { MBTNC_AddButton = "Both",    MBTNCD_ButtonWidth = 0.33 },
+        INP_DoNotifyChanged = true,
+    })
+
+    InLineType = self:AddInput("Type", "Timeline_Type", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        MBTNC_ShowName = false,
+        { MBTNC_AddButton = "Solid",        MBTNCD_ButtonWidth = 0.33 },
+        { MBTNC_AddButton = "Dash",         MBTNCD_ButtonWidth = 0.34 },
+        { MBTNC_AddButton = "Dot",          MBTNCD_ButtonWidth = 0.33 },
+        { MBTNC_AddButton = "Dash Dot",     MBTNCD_ButtonWidth = 0.5 },
+        { MBTNC_AddButton = "Dash Dot Dot", MBTNCD_ButtonWidth = 0.5 },
+    })
+
+    InThickness = self:AddInput("Thickness", "Thickness", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.003,
+        INP_MinAllowed = 0.0001,
+        INP_MaxAllowed = 0.1,
+    })
+
+    InRoundness = self:AddInput("Roundness", "Roundness", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.0,
+        INP_MinAllowed = 0.0001,
+        INP_MaxAllowed = 1.0,
+    })
+
+    InRectPadding = self:AddInput("Padding", "RectPadding", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.0,
+        INP_MinAllowed = 0.0,
+        INP_MaxAllowed = 0.2,
+    })
+
+    Inline1Separator_6 = self:AddInput("line1Separator", "line1Separator_6", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InR_1 = self:AddInput("Red", "Red_1", {
+        ICS_Name = "Solid Shape Color",
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.0,
+        INP_MaxScale = 1.0,
+        CLRC_ShowWheel = false,
+        IC_ControlGroup = 10,
+        IC_ControlID = 0,
+    })
+
+    InG_1 = self:AddInput("Green", "Green_1", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 1.0,
+        IC_ControlGroup = 10,
+        IC_ControlID = 1,
+    })
+
+    InB_1 = self:AddInput("Blue", "Blue_1", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 1.0,
+        IC_ControlGroup = 10,
+        IC_ControlID = 2,
+    })
+
+    InR_2 = self:AddInput("Red", "Red_2", {
+        ICS_Name = "Lines Color",
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 1.0,
+        INP_MaxScale = 1.0,
+        CLRC_ShowWheel = false,
+        IC_ControlGroup = 20,
+        IC_ControlID = 0,
+    })
+
+    InG_2 = self:AddInput("Green", "Green_2", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.9,
+        IC_ControlGroup = 20,
+        IC_ControlID = 1,
+    })
+
+    InB_2 = self:AddInput("Blue", "Blue_2", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default = 0.6,
+        IC_ControlGroup = 20,
+        IC_ControlID = 2,
+    })
+
+    self:EndControlNest()
+
+    InImage = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+
+    OutImage = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+function NotifyChanged(inp, param, time)
+    local trimModeCheck = self:FindInput("TrimMode"):GetSource(time, 0).Value or ""
+    --print("Trim mode changed to: " .. trimModeCheck)
+    if inp == InTrim then
+        -- Hide all mode-specific controls first
+        InTrimHigh:SetAttrs({ IC_Visible = false })
+        InTrimLow:SetAttrs({ IC_Visible = false })
+        InTrimOffset:SetAttrs({ IC_Visible = false })
+        InTrimCount:SetAttrs({ IC_Visible = false })
+
+        if param.Value == 1 then
+            InTrimMode:SetAttrs({ IC_Visible = true })
+            if trimModeCheck == 3 then
+                InTrimHigh:SetAttrs({ IC_Visible = true })
+                InTrimLow:SetAttrs({ IC_Visible = true })
+                InTrimOffset:SetAttrs({ IC_Visible = true })
+                InTrimCount:SetAttrs({ IC_Visible = false })
+            else
+                InTrimCount:SetAttrs({ IC_Visible = true })
+            end
+        else
+            InTrimMode:SetAttrs({ IC_Visible = false })
+        end
+    end
+    if inp == InTrimMode then
+        -- print("Trim mode changed    : " .. param.Value)
+        -- Show controls relevant to the selected mode
+        if param.Value == 0 then
+            InTrimCount:SetAttrs({ IC_Visible = true })
+            InTrimHigh:SetAttrs({ IC_Visible = false })
+            InTrimLow:SetAttrs({ IC_Visible = false })
+            InTrimOffset:SetAttrs({ IC_Visible = false })
+        elseif param.Value == 1 then
+            InTrimCount:SetAttrs({ IC_Visible = true })
+            InTrimHigh:SetAttrs({ IC_Visible = false })
+            InTrimLow:SetAttrs({ IC_Visible = false })
+            InTrimOffset:SetAttrs({ IC_Visible = false })
+        elseif param.Value == 2 then
+            InTrimCount:SetAttrs({ IC_Visible = true })
+            InTrimHigh:SetAttrs({ IC_Visible = false })
+            InTrimLow:SetAttrs({ IC_Visible = false })
+            InTrimOffset:SetAttrs({ IC_Visible = false })
+        elseif param.Value == 3 then
+            InTrimHigh:SetAttrs({ IC_Visible = true })
+            InTrimLow:SetAttrs({ IC_Visible = true })
+            InTrimOffset:SetAttrs({ IC_Visible = true })
+            InTrimCount:SetAttrs({ IC_Visible = false })
+        end
+    end
+end
+
+function makeRect(posX, posY, dimX, dimY)
+    return { posX = posX, posY = posY, dimX = dimX, dimY = dimY }
+end
+
+function randomChoice(arr)
+    return arr[math.random(#arr)]
+end
+
+function initializeBools(gridDivsX, gridDivsY)
+    for x = 1, gridDivsX do
+        bools[x] = {}
+        for y = 1, gridDivsY do
+            bools[x][y] = true
+        end
+    end
+end
+
+function constructIrregularGrid(gridDivsX, gridDivsY, sizesArr)
+    if #sizesArr == 0 then
+        return
+    end
+    local validSizes = {}
+    for _, v in ipairs(sizesArr) do
+        if type(v) == "number" then
+            table.insert(validSizes, v)
+        end
+    end
+    if #validSizes == 0 then
+        return
+    end
+
+    local maxSize = math.max(unpack(validSizes))
+
+    for x = 1, gridDivsX - maxSize + 1 do
+        for y = 1, gridDivsY - maxSize + 1 do
+            local xdim = randomChoice(validSizes)
+            local ydim = randomChoice(validSizes)
+            local fits = true
+
+            if x + xdim - 1 > gridDivsX or y + ydim - 1 > gridDivsY then
+                fits = false
+            else
+                for xc = x, x + xdim - 1 do
+                    for yc = y, y + ydim - 1 do
+                        if not bools[xc][yc] then
+                            fits = false
+                            break
+                        end
+                    end
+                    if not fits then
+                        break
+                    end
+                end
+            end
+
+            if fits then
+                for xc = x, x + xdim - 1 do
+                    for yc = y, y + ydim - 1 do
+                        bools[xc][yc] = false
+                    end
+                end
+                table.insert(rectInfo, makeRect(x, y, xdim, ydim))
+            end
+        end
+    end
+end
+
+function buildShape(width, height, gridDivsX, gridDivsY, paddingScale, roundness, rectPadding)
+    local shape = Shape()
+    local padding = width * paddingScale
+    local gridSpacingX = (width - padding * 2) / gridDivsX
+    local gridSpacingY = (height - padding * 2) / gridDivsY
+
+    for _, r in ipairs(rectInfo) do
+        local left = (r.posX - 1) * gridSpacingX + padding + rectPadding
+        local top = (r.posY - 1) * gridSpacingY + padding + rectPadding
+        local right = left + r.dimX * gridSpacingX - 2 * rectPadding
+        local bottom = top + r.dimY * gridSpacingY - 2 * rectPadding
+        shape:AddRectangle(left, right, top, bottom, roundness, 8)
+    end
+
+    return shape
+end
+
+
+-------------------------xxxxxxx----------------------------------
+function generateGridPattern(gridDivsX, gridDivsY, rectSizes, smallSizes, baseSeed, randomizeSeed)
+    local currentRectInfo = {}
+    local currentBools = {}
+    
+    -- Set seed for this specific pattern
+    if randomizeSeed then
+        math.randomseed(baseSeed + randomizeSeed)
+    else
+        math.randomseed(baseSeed)
+    end
+    
+    -- Initialize bools for this pattern
+    for x = 1, gridDivsX do
+        currentBools[x] = {}
+        for y = 1, gridDivsY do
+            currentBools[x][y] = true
+        end
+    end
+    
+    -- Generate pattern using the same logic as your original functions
+    local function constructPattern(sizesArr)
+        if #sizesArr == 0 then return end
+        
+        local validSizes = {}
+        for _, v in ipairs(sizesArr) do
+            if type(v) == "number" then
+                table.insert(validSizes, v)
+            end
+        end
+        if #validSizes == 0 then return end
+
+        local maxSize = math.max(unpack(validSizes))
+
+        for x = 1, gridDivsX - maxSize + 1 do
+            for y = 1, gridDivsY - maxSize + 1 do
+                local xdim = validSizes[math.random(#validSizes)]
+                local ydim = validSizes[math.random(#validSizes)]
+                local fits = true
+
+                if x + xdim - 1 > gridDivsX or y + ydim - 1 > gridDivsY then
+                    fits = false
+                else
+                    for xc = x, x + xdim - 1 do
+                        for yc = y, y + ydim - 1 do
+                            if not currentBools[xc][yc] then
+                                fits = false
+                                break
+                            end
+                        end
+                        if not fits then break end
+                    end
+                end
+
+                if fits then
+                    for xc = x, x + xdim - 1 do
+                        for yc = y, y + ydim - 1 do
+                            currentBools[xc][yc] = false
+                        end
+                    end
+                    table.insert(currentRectInfo, makeRect(x, y, xdim, ydim))
+                end
+            end
+        end
+    end
+    
+    constructPattern(rectSizes)
+    constructPattern(smallSizes)
+    
+    return currentRectInfo
+end
+
+function buildScrollingShape(width, height, gridDivsX, gridDivsY, paddingScale, roundness, rectPadding, scrollOffset, randomizeDuplicates, baseSeed, rectSizes, smallSizes)
+    local shape = Shape()
+    local padding = width * paddingScale
+    local gridSpacingX = (width - padding * 2) / gridDivsX
+    local gridSpacingY = (height - padding * 2) / gridDivsY
+    
+    -- Calculate the total grid width for tiling
+    local totalGridWidth = width - padding * 2
+    
+    -- Normalize scroll offset to grid width (for seamless tiling)
+    local normalizedOffset = (scrollOffset * gridSpacingX) % totalGridWidth
+    
+    -- We need to render multiple copies to ensure screen coverage
+    local copies = math.ceil(width / totalGridWidth) + 2
+    
+    for copy = -1, copies do
+        local copyOffsetX = copy * totalGridWidth - normalizedOffset
+        
+        -- Generate pattern for this copy
+        local currentRectInfo
+        if randomizeDuplicates then
+            -- Each copy gets a different seed for randomization
+            currentRectInfo = generateGridPattern(gridDivsX, gridDivsY, rectSizes, smallSizes, baseSeed, copy * 1000)
+        else
+            -- All copies use the same pattern (original rectInfo)
+            currentRectInfo = rectInfo
+        end
+        
+        for _, r in ipairs(currentRectInfo) do
+            local left = (r.posX - 1) * gridSpacingX + padding + rectPadding + copyOffsetX
+            local top = (r.posY - 1) * gridSpacingY + padding + rectPadding
+            local right = left + r.dimX * gridSpacingX - 2 * rectPadding
+            local bottom = top + r.dimY * gridSpacingY - 2 * rectPadding
+            
+            -- Only add rectangles that are visible on screen
+            if right > -padding and left < width + padding then
+                shape:AddRectangle(left, right, top, bottom, roundness, 8)
+            end
+        end
+    end
+    
+    return shape
+end
+
+
+
+--------------------------------xxxxxx---------------------------------
+
+
+function convertY(y, ref_img)
+    return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+-- Trimming function for rectInfo
+function trimRectInfo(rects, trimCount, trimMode, trimLow, trimHigh, trimOffset)
+    if trimMode ~= 3 then
+        -- Original modes
+        if trimCount <= 0 or trimCount >= #rects then
+            return rects
+        end
+        local trimmed = {}
+        if trimMode == 0 then -- First
+            for i = 1, trimCount do
+                trimmed[#trimmed + 1] = rects[i]
+            end
+        elseif trimMode == 1 then -- Last
+            for i = #rects - trimCount + 1, #rects do
+                trimmed[#trimmed + 1] = rects[i]
+            end
+        elseif trimMode == 2 then -- Random
+            local indices = {}
+            for i = 1, #rects do
+                indices[i] = i
+            end
+            for i = #indices, 2, -1 do
+                local j = math.random(i)
+                indices[i], indices[j] = indices[j], indices[i]
+            end
+            for i = 1, trimCount do
+                trimmed[#trimmed + 1] = rects[indices[i]]
+            end
+        end
+        return trimmed
+    else
+        -- Range Selection mode with looping
+        local n = #rects
+        if n == 0 then return {} end
+        local trimmed = {}
+        local low = math.max(1, math.min(trimLow, n))
+        local high = math.max(low, math.min(trimHigh, n))
+        local offset = trimOffset or 0
+        local rangeLen = high - low + 1
+        -- Looping logic
+        for i = 0, rangeLen - 1 do
+            local idx = ((low - 1 + offset + i) % n) + 1
+            trimmed[#trimmed + 1] = rects[idx]
+        end
+        return trimmed
+    end
+end
+
+
+
+function Process(req)
+    local img = InImage:GetValue(req)
+    local out = img:CopyOf()
+
+    local gridDivsX = InGridDivsX:GetValue(req).Value
+    local gridDivsY = InGridDivsY:GetValue(req).Value
+    local paddingScale = 0
+    local rectSizeMin = InRectSizeMin:GetValue(req).Value
+    local rectSizeMax = InRectSizeMax:GetValue(req).Value
+    local smallSize = InSmallSize:GetValue(req).Value
+
+    local scrollGrid = InScroll:GetValue(req).Value
+    local randomizeDuplicates = InRandomizeDuplicates:GetValue(req).Value == 1
+
+    local canvasWidth = InCanvasWidth:GetValue(req).Value
+    local canvasHeight = InCanvasHeight:GetValue(req).Value
+    local thickness = InThickness:GetValue(req).Value
+    local roundness = InRoundness:GetValue(req).Value
+    local position = InCenter:GetValue(req)
+    local cx = position.X
+    local cy = convertY(position.Y, img)
+    local shapeScale = InScale:GetValue(req).Value
+
+    --Colors
+    local r1 = InR_1:GetValue(req).Value
+    local g1 = InG_1:GetValue(req).Value
+    local b1 = InB_1:GetValue(req).Value
+    local a1 = 1.0
+
+    local r2 = InR_2:GetValue(req).Value
+    local g2 = InG_2:GetValue(req).Value
+    local b2 = InB_2:GetValue(req).Value
+    local a2 = 1.0
+
+    -- Seed the random number generator
+    local seed = InSeed:GetValue(req).Value
+    math.randomseed(seed)
+
+    local ic = ImageChannel(out, 8)
+    local fs = FillStyle()
+    local cs = ChannelStyle()
+    local mat = Matrix4()
+
+    -- Ensure smallSize is clamped between rectSizeMin and rectSizeMax
+    smallSize = math.max(rectSizeMin, math.min(smallSize, rectSizeMax))
+
+    local RECT_SIZES = {}
+    for i = rectSizeMin, rectSizeMax do
+        table.insert(RECT_SIZES, i)
+    end
+    local SMALL_SIZES = { smallSize }
+
+    -- Generate the base pattern (will be used for all copies if randomization is off)
+    rectInfo = {}
+    initializeBools(gridDivsX, gridDivsY)
+    constructIrregularGrid(gridDivsX, gridDivsY, RECT_SIZES)
+    constructIrregularGrid(gridDivsX, gridDivsY, SMALL_SIZES)
+
+    -- === TRIM RECTINFO ===
+    local trimCount = InTrimCount:GetValue(req).Value
+    local trimMode = InTrimMode:GetValue(req).Value
+    local trimLow = InTrimLow and InTrimLow:GetValue(req).Value or 1
+    local trimHigh = InTrimHigh and InTrimHigh:GetValue(req).Value or 50
+    local trimOffset = InTrimOffset and InTrimOffset:GetValue(req).Value or 0
+
+    if InTrim:GetValue(req).Value == 0 then
+        trimCount = 0
+    elseif InTrim:GetValue(req).Value == 1 then
+        if trimMode == 3 then
+            rectInfo = trimRectInfo(rectInfo, trimCount, trimMode, trimLow, trimHigh, trimOffset)
+        elseif trimCount > 0 and trimCount < #rectInfo then
+            rectInfo = trimRectInfo(rectInfo, trimCount, trimMode)
+        end
+    end
+
+    local outlinetypes = { "OLT_Solid", "OLT_Dash", "OLT_Dot", "OLT_DashDot", "OLT_DashDotDot" }
+    local linetype = math.floor(InLineType:GetValue(req).Value + 0.5) + 1
+
+    local rectPadding = InRectPadding and InRectPadding:GetValue(req).Value or 0.01
+    
+    -- Use the updated scrolling shape builder with randomization option
+    local shape = buildScrollingShape(canvasWidth, canvasHeight, gridDivsX, gridDivsY, paddingScale, roundness, rectPadding, scrollGrid, randomizeDuplicates, seed, RECT_SIZES, SMALL_SIZES)
+
+    mat:Identity()
+    mat:Scale(shapeScale, shapeScale, 1.0)
+    mat:Move(cx, cy, 0)
+
+    -- [Rest of the rendering code remains the same...]
+    if InOutline:GetValue(req).Value == 0 then
+        -- Outline
+        shape = shape:OutlineOfShape(thickness, outlinetypes[linetype], "OJT_Round", (req:IsQuick() and 8 or 16))
+        cs.Color = Pixel({ R = r2, G = g2, B = b2, A = a2 })
+        ic:SetStyleFill(fs)
+        ic:ShapeFill(shape:TransformOfShape(mat))
+        ic:PutToImage("CM_Merge", cs)
+    elseif InOutline:GetValue(req).Value == 1 then
+        -- Solid
+        cs.Color = Pixel({ R = r1, G = g1, B = b1, A = a1 })
+        ic:SetStyleFill(fs)
+        ic:ShapeFill(shape:TransformOfShape(mat))
+        ic:PutToImage("CM_Merge", cs)
+    elseif InOutline:GetValue(req).Value == 2 then
+        -- Solid and Outline
+        cs.Color = Pixel({ R = r1, G = g1, B = b1, A = a1 })
+        ic:SetStyleFill(fs)
+        ic:ShapeFill(shape:TransformOfShape(mat))
+        ic:PutToImage("CM_Merge", cs)
+        -- Outline
+        shape = shape:OutlineOfShape(thickness, outlinetypes[linetype], "OJT_Round", (req:IsQuick() and 8 or 16))
+
+        cs.Color = Pixel({ R = r2, G = g2, B = b2, A = a2 })
+        ic:SetStyleFill(fs)
+        ic:ShapeFill(shape:TransformOfShape(mat))
+        ic:PutToImage("CM_Merge", cs)
+    end
+
+    OutImage:Set(req, out)
+end
+
+
+-------------------old------------------------
+
+
+
+

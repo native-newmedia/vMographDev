@@ -1,0 +1,562 @@
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "MultiList"
+DATATYPE = "Image"
+
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType      = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls   = true,
+    REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name           = FUSE_NAME,
+    REGS_OpDescription  = "A CheckListControl InputControl.",
+    REGS_OpIconString   = FUSE_NAME
+})
+
+
+--[[
+function Create()
+    -- Main Checklist Control with default values
+  CheckList=  self:AddInput("CheckList", "CheckList", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 3,
+        CLC_Rows = 4,  -- Default 4 rows for testing
+        CLC_EnableEditing = 1,
+        CLC_EnableReordering = 1,
+        CLC_SelectedItem = 0,  -- First row selected by default
+    })
+
+    -- Default row names and values
+    local defaultNames = {"Background", "Foreground", "Mask", "Overlay"}
+    local defaultEnabled = {1, 1, 0, 1}  -- Third item disabled by default
+
+    -- Create all row-specific controls with defaults
+    for i = 0, 3 do  -- For 4 default rows
+        -- Row name with default value
+        self:AddInput("Name_"..i, "Name "..i, {
+            LINKID_DataType = "Text",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 2048 + i,
+            INP_Default = defaultNames[i+1] or "Item "..(i+1),
+        })
+
+        -- Reset button for each row
+        self:AddInput("Reset_"..i, "Reset "..i, {
+            LINKID_DataType = "Number",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 4096 + i,
+            INP_DoNotifyChanged = true,
+            INP_Default = 0,
+            BTNCS_Execute = "R",  -- Compact "Reset" label
+        })
+
+        -- Enable state for each row
+        self:AddInput("Enable_"..i, "Enable "..i, {
+            LINKID_DataType = "Number",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 1024 + i,
+            INP_Default = defaultEnabled[i+1] or 1,
+            INP_Integer = true,
+            INP_MinAllowed = 0,
+            INP_MaxAllowed = 1,
+        })
+
+        -- Image input for each row (optional)
+        self:AddInput("Input_"..i, defaultNames[i+1] or "Input "..i, {
+            LINKID_DataType = "Image",
+            LINKID_AllowedDataType = "Image",
+            INP_AcceptsGLImages = true,
+            INP_Required = false,
+        })
+    end
+
+    -- Default ordering table (can rearrange the default order)
+  Ordering=  self:AddInput("Ordering", "Ordering", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 3,
+        INP_Default = {0, 1, 2, 3},  -- Default order
+    })
+
+    -- Add test buttons with default labels
+   Add= self:AddInput("AddButton", "Add", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 1,
+        INP_DoNotifyChanged = true,
+        BTNCS_Execute = "+ Add",  -- Fancy label
+    })
+
+   Delete= self:AddInput("RemoveButton", "Delete", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 2,
+        INP_DoNotifyChanged = true,
+        BTNCS_Execute = "- Del",  -- Fancy label
+    })
+
+    -- Test button with default action
+   TestButton= self:AddInput("TestButton", "Test All", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ButtonControl",
+        INP_DoNotifyChanged = true,
+        BTNCS_Execute = "▶ Test",  -- Play icon for testing
+    })
+        -- Output
+    Output=self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+--]]
+--[[
+function Createxxxxxxx()
+    -- Main Checklist Control
+    self:AddInput("CheckList", "CheckList", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 3,
+        CLC_Rows = 4,  -- Matches your screenshot showing 4 rows
+        CLC_EnableEditing = 1,
+        CLC_EnableReordering = 1,
+    })
+
+    -- Selection tracking
+    self:AddInput("Selection", "Selection", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 0,  -- CHECKLISTCONTROL_SELECTION
+        INP_Integer = true,
+        INP_MinAllowed = -1,
+        INP_Default = -1,
+    })
+
+    -- Add/Remove buttons
+    self:AddInput("AddButton", "Add", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 1,  -- CHECKLISTCONTROL_ADD
+        INP_DoNotifyChanged = true,
+        BTNCS_Execute = "Add",  -- Explicit button label
+    })
+
+    self:AddInput("RemoveButton", "Delete", {  -- Changed label to match your screenshot
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 2,  -- CHECKLISTCONTROL_REMOVE
+        INP_DoNotifyChanged = true,
+        BTNCS_Execute = "Delete",  -- Explicit button label
+    })
+
+    -- Ordering table
+    self:AddInput("Ordering", "Ordering", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 3,  -- CHECKLISTCONTROL_ORDERING
+    })
+
+    -- Reset button (using BUTTON ID)
+    self:AddInput("ResetButton", "Reset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 4,  -- CHECKLISTCONTROL_BUTTON
+        INP_DoNotifyChanged = true,
+        BTNCS_Execute = "Reset",  -- Explicit button label
+    })
+
+    -- Create all row-specific controls
+    for i = 0, 3 do  -- For 4 rows as in your screenshot
+        -- Row name (this is what's missing in your UI)
+        self:AddInput("Name_"..i, "Name "..i, {
+            LINKID_DataType = "Text",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 2048 + i,  -- CHECKLISTCONTROL_NAME_BASE
+            INP_Default = "Item "..(i+1),
+        })
+
+        -- Reset button for each row (missing in your UI)
+        self:AddInput("Reset_"..i, "Reset "..i, {
+            LINKID_DataType = "Number",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 4096 + i,  -- CHECKLISTCONTROL_RESET_BASE
+            INP_DoNotifyChanged = true,
+            INP_External = false,
+            INP_Default = 0,
+        })
+
+
+    end
+
+    -- Output
+    Output=self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+function Process(req)
+    -- Your processing code here
+    local out = Image({
+        IMG_Document = self.Comp,
+        IMG_Width = 1920,
+        IMG_Height = 1080,
+        IMG_Channel = "RGBA",
+    })
+    Output:Set(req, out)
+end
+
+function NotifyChangedx(inp, param, time)
+
+    if inp == self.TestButton then
+        -- Test pattern - rotate all names
+        local names = {}
+        for i = 0, self.CheckList:GetAttrs().CLC_Rows - 1 do
+            names[i] = self:GetInput("Name_"..i):GetValue(time).Value
+        end
+
+        -- Rotate names
+        local last = names[#names]
+        for i = #names, 1, -1 do
+            names[i] = names[i-1]
+        end
+        names[0] = last
+
+        -- Apply rotated names
+        for i = 0, #names do
+            self:GetInput("Name_"..i):SetValue(names[i], time)
+        end
+
+        return true
+    end
+
+    if inp == self.AddButton then
+        -- Handle add button
+        local rows = self.CheckList:GetAttrs().CLC_Rows
+        local newIndex = rows
+        self.CheckList:SetAttrs({CLC_Rows = rows + 1})
+
+        -- Add new row controls
+        self:AddInput("Name_"..newIndex, "Name "..newIndex, {
+            LINKID_DataType = "Text",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 2048 + newIndex,
+            INP_Default = "New Item",
+        })
+
+        self:AddInput("Reset_"..newIndex, "Reset "..newIndex, {
+            LINKID_DataType = "Number",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 4096 + newIndex,
+            INP_DoNotifyChanged = true,
+        })
+
+        return true
+    elseif inp == self.RemoveButton then
+        local selection = self.Selection:GetValue(time).Value
+        if selection >= 0 then
+            local rows = self.CheckList:GetAttrs().CLC_Rows
+            if rows > 0 then
+                -- Remove row controls
+                self:DeleteInput("Name_"..selection)
+                self:DeleteInput("Reset_"..selection)
+
+                -- Shift remaining rows
+                for i = selection + 1, rows - 1 do
+                    local name = self:FindInput("Name_"..i)
+                    if name then name.SetAttrs({IC_ControlID = 2048 + i - 1}) end
+
+                    local reset = self:FindInput("Reset_"..i)
+                    if reset then reset.SetAttrs({IC_ControlID = 4096 + i - 1}) end
+                end
+
+                self.CheckList:SetAttrs({CLC_Rows = rows - 1})
+            end
+        end
+        return true
+    elseif inp == self.ResetButton then
+        -- Handle global reset
+        return true
+    end
+
+    -- Check for per-row reset buttons
+    for i = 0, self.CheckList:GetAttrs().CLC_Rows - 1 do
+        if inp == self:FindInput("Reset_"..i) then
+            -- Handle reset for row i
+            return true
+        end
+    end
+end
+
+--]]
+
+
+-- Default row names and values
+local defaultNames = { "Background", "Foreground", "Mask", "Overlay", "Foreground", "Mask", "Overlay" }
+local defaultEnabled = { 1, 1, 0, 1, 1, 0, 1 } -- Third item disabled by default
+
+function Create()
+    -- Main Checklist Control
+    CheckList = self:AddInput("CheckList", "CheckList", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 3,          -- CHECKLISTCONTROL_ORDERING
+        CLC_ColumnFlags = 3,       -- Two columns
+        CLC_DisplayFlags = 0,      -- Normal display
+        CLC_AllowMultiselect = 0,  -- Single selection
+        CLC_TriState = 0,          -- 0 = Off/On, 1 = Off/On/Intermediate
+        CLC_UpsideDown = 0,        -- 0 = Normal, 1 = Reverse display order
+        CLC_Rows = 5,              -- Initial number of rows
+        CLC_EnableEditing = 1,     -- 0 = Read-only, 1 = Editable names
+        CLC_EnableReordering = 1,  -- 0 = Fixed order, 1 = Drag reorder
+        CLC_EnableMultiselect = 0, -- 0 = Single select, 1 = Multi-select
+        CLC_SelectedItem = 0,
+    })
+
+    -- Selection tracking
+    Selection = self:AddInput("Selection", "Selection", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 0, -- CHECKLISTCONTROL_SELECTION
+        INP_Integer = true,
+        INP_MinAllowed = -1,
+        INP_Default = -1,
+    })
+
+    -- Add/Remove buttons
+    AddButton = self:AddInput("AddButton", "Add", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 1, -- CHECKLISTCONTROL_ADD
+        INP_DoNotifyChanged = true,
+    })
+
+    RemoveButton = self:AddInput("RemoveButton", "Remove", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 2, -- CHECKLISTCONTROL_REMOVE
+        INP_DoNotifyChanged = true,
+    })
+
+    -- Ordering table
+    Ordering = self:AddInput("Ordering", "Ordering", {
+        LINKID_DataType = "ScriptVal",
+        INPID_InputControl = "CheckListControl",
+        IC_ControlGroup = 1,
+        IC_ControlID = 3, -- CHECKLISTCONTROL_ORDERING
+    })
+
+    -- Helper function for safe default values
+    local function getDefault(tbl, idx, fallback)
+        if tbl and tbl[idx] ~= nil then
+            return tbl[idx]
+        end
+        return fallback
+    end
+
+    -- Create initial set of rows with image inputs
+    for i = 0, 4 do
+        -- Row name
+        self:AddInput("Name_" .. i, "Name " .. i, {
+            LINKID_DataType = "Text",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 2048 + i, -- NAME_BASE + index
+            -- INP_Default = getDefault(defaultNames, i+1, "Item "..(i+1))
+
+
+
+        })
+
+        -- Image input for this row
+        self:AddInput("Input_" .. i, "Input " .. i, {
+            LINKID_DataType = "Image",
+            LINKID_AllowedDataType = "Image",
+            INP_AcceptsGLImages = true,
+            INP_Required = false,
+            LINK_Main = 1 + i,
+        })
+
+        -- Enable toggle
+        self:AddInput("Enable_" .. i, "Enable " .. i, {
+            LINKID_DataType = "Number",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 1024 + i, -- ENABLED_BASE + index
+            INP_Integer = true,
+            INP_Default = 1,
+            INP_MinAllowed = 0,
+            INP_MaxAllowed = 1,
+        })
+        self:AddInput("Delete " .. i, "Delete_" .. i, {
+            LINKID_DataType    = "Number",
+            INPID_InputControl = "ButtonControl",
+            IC_ControlGroup    = 1,
+            IC_ControlID       = 3072 + i, -- Delete
+        })
+
+        self:AddInput("Reset " .. i, "Reset_" .. i, {
+            LINKID_DataType    = "Number",
+            INPID_InputControl = "ButtonControl",
+            IC_ControlGroup    = 1,
+            IC_ControlID       = 4096 + i, -- Reset
+        })
+    end
+
+    -- Output
+    Output = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+function OnAddToFlow()
+    -- Default row names and values
+    local defaultRowNames = { "Background", "Foreground", "Mask", "Overlay", "Foreground", "Mask", "Overlay" }
+    local defaultEnabled = { 1, 1, 0, 1, 1, 0, 1 } -- Third item disabled by default
+
+    -- Initialize inputs with 0-based naming
+    for i = 0, #defaultRowNames - 1 do
+        local layerIndex = i
+        local arrayIndex = i + 1 -- Lua uses 1-based arrays
+
+        self:SetInput("Enable_" .. layerIndex, 1)
+        self:SetInput("Name_" .. layerIndex, defaultRowNames[arrayIndex])
+        self:SetInput("Value_" .. layerIndex, "Default")
+    end
+
+    -- Set ordering table
+    local ordering = ScriptVal(SV_Table)
+    for i = 0, #defaultRowNames - 1 do
+        ordering[i + 1] = i -- Fusion table[1-based] = layer index(0-based)
+    end
+    self:SetInput("CheckList", ordering)
+end
+
+function Process(req)
+    -- Get the current selection
+    local selection = Selection:GetValue(req).Value
+
+    -- Get the ordering table
+    local ordering = Ordering:GetValue(req).Value
+
+    -- Process your data here based on the checklist state
+
+    -- Set output (example with image output)
+    -- If no layers processed, create empty image
+    local img = nil
+    if img == nil then
+        img = Image({
+            IMG_Document = self.Comp,
+            IMG_Width = 1920,
+            IMG_Height = 1080,
+            IMG_XScale = XAspect,
+            IMG_YScale = YAspect,
+            IMAT_OriginalWidth = 1920,
+            IMAT_OriginalHeight = 1080,
+            IMG_Quality = not req:IsQuick(),
+            IMG_MotionBlurQuality = not req:IsNoMotionBlur(),
+        })
+
+        if img then
+            img:Clear()
+        end
+    end
+
+    Output:Set(req, img)
+
+    -- Output:Set(req, out)
+end
+
+function NotifyChanged(inp, param, time)
+    if inp == AddButton then
+        -- Handle add button press
+        local rows = CheckList:GetAttrs().CLC_Rows
+        CheckList:SetAttrs({ CLC_Rows = rows + 1 })
+
+        -- Add new inputs for the new row
+        local i = rows
+        self:AddInput("Name_" .. i, "Name " .. i, {
+            LINKID_DataType = "Text",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 2048 + i,
+            INP_Default = "New Item",
+        })
+
+        self:AddInput("Value_" .. i, "Value " .. i, {
+            LINKID_DataType = "Text",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 6144 + i,
+            INP_Default = "new",
+        })
+
+        self:AddInput("Enable_" .. i, "Enable " .. i, {
+            LINKID_DataType = "Number",
+            INPID_InputControl = "CheckListControl",
+            IC_ControlGroup = 1,
+            IC_ControlID = 1024 + i,
+            INP_Integer = true,
+            INP_Default = 1,
+            INP_MinAllowed = 0,
+            INP_MaxAllowed = 1,
+        })
+
+        return true
+    elseif inp == RemoveButton then
+        -- Handle remove button press
+        local selection = Selection:GetValue(time).Value
+        if selection >= 0 then
+            local rows = CheckList:GetAttrs().CLC_Rows
+            if rows > 0 then
+                -- Remove the selected row's inputs
+                self:DeleteInput("Name_" .. selection)
+                self:DeleteInput("Value_" .. selection)
+                self:DeleteInput("Enable_" .. selection)
+
+                -- Shift remaining rows up
+                for i = selection + 1, rows - 1 do
+                    -- Rename inputs to fill the gap
+                    local name = self:FindInput("Name_" .. i)
+                    if name then name.SetAttrs({ IC_ControlID = 2048 + i - 1 }) end
+
+                    local value = self:FindInput("Value_" .. i)
+                    if value then value.SetAttrs({ IC_ControlID = 6144 + i - 1 }) end
+
+                    local enable = self:FindInput("Enable_" .. i)
+                    if enable then enable.SetAttrs({ IC_ControlID = 1024 + i - 1 }) end
+                end
+
+                CheckList:SetAttrs({ CLC_Rows = rows - 1 })
+            end
+        end
+        return true
+    end
+end

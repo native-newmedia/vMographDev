@@ -1,0 +1,448 @@
+-- ============================================================================
+-- version
+-- ============================================================================
+version         = "v1.00 - Date"
+-- ============================================================================
+-- modules
+-- ============================================================================
+local ffi       = require("ffi")
+local curl      = require("lj2curl")
+local json      = require("dkjson") -- or use cjson if available
+local jsonutils = self and require("vjsonutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME       = "vScriptValPresetSaver"
+DATATYPE        = "Text"
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType      = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls   = true,
+    REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name           = FUSE_NAME,
+    REGS_OpDescription  = "View a Base64 encoded PNG image in the Inspector.",
+    REGS_OpIconString   = FUSE_NAME,
+    -- Should the current time setting be cached?
+    REG_TimeVariant     = true,
+    REG_Unpredictable   = true,
+    REGS_IconID         = "Icons.Tools.Icons.StickyNote",
+})
+
+
+-- ------------------------------------------------------------------------
+
+-- ------------------------------------------------------------------------
+function Create()
+    -- [[ Creates the user interface. ]]
+    InText = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1
+    })
+
+    --    InFileType = self:AddInput("File Type", "FileType", {
+    --        LINKID_DataType = "Number",
+    --        INPID_InputControl = "ComboControl",
+    --        INP_Default = 0,
+    --        INP_Integer = true,
+    --        ICD_Width = 1,
+    --        {CCS_AddString = "JPEG"},
+    --        {CCS_AddString = "PNG"},
+    --        {CCS_AddString = "GIF"},
+    --    })
+
+    -- Display the image
+    InLabel = self:AddInput("", 'Label', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        --IC_ControlPage = -1,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    InImageCode = self:AddInput("imageCode", 'imageCode', {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        -- INP_Default = "Response from server will be displayed here",
+        INP_External = false,
+        LBLC_MultiLine = true,
+        INP_Passive = true,
+        TEC_Lines = 3,
+        TEC_Visible = true,
+        TEC_Wrap = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    Inline1Separator1 = self:AddInput("line1Separator1", "line1Separator1", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+    InLabel3 = self:AddInput("Description", 'Label3', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+        --  IC_Visible = false, -- Hidden by default
+    })
+    InDescription = self:AddInput("Description", "Description", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        -- INP_Default = "Response from server will be displayed here",
+        INP_External = false,
+        LBLC_MultiLine = true,
+        TEC_Lines = 2,
+        TEC_Visible = true,
+        TEC_Wrap = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    InLabel1 = self:AddInput("Paste Copied Tools", 'Label1', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+        --  IC_Visible = false, -- Hidden by default
+    })
+    InPasteTools = self:AddInput("Paste Copied Tools", "PasteTools", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        TEC_Lines = 10,
+        LBLC_MultiLine = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+        TEC_Wrap = true,
+    })
+    Inline1Separator2 = self:AddInput("line1Separator2", "line1Separator_2", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+    SendToGoogle_Button = self:AddInput("SendToGoogle", "SendGoogle", {
+        LINKS_Name = "SendToGoogle",
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ButtonControl",
+        -- BTNCS_Execute = SendData,
+        INP_DoNotifyChanged = true,
+
+    })
+
+    self:BeginControlNest("Server Response", "ConnectionSettings", false, {})
+    InResponse = self:AddInput("Server Response", "Response", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        -- INP_Default = "Response from server will be displayed here",
+        INP_External = false,
+        LBLC_MultiLine = true,
+        TEC_Lines = 3,
+        TEC_Visible = true,
+        TEC_Wrap = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    self:EndControlNest()
+    OutText = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1
+    })
+end
+
+function escapeJsonForShell(str)
+    if type(str) ~= "string" then return "" end
+
+    -- Trim leading/trailing whitespace
+    str = str:match("^%s*(.-)%s*$")
+
+    -- Escape shell/JSON-safe characters
+    str = str:gsub('\\', '\\\\') -- backslash
+    str = str:gsub('"', '\\"')   -- double quote
+    str = str:gsub('\n', '\\n')  -- newline
+    str = str:gsub('\r', '\\r')  -- carriage return
+    str = str:gsub('\t', '\\t')  -- tab
+
+    return str
+end
+
+function escapeJsonForShell_old(str)
+    -- Escape for shell command
+    str = str:gsub('\\', '\\\\') -- Escape backslashes first
+    str = str:gsub('"', '\\"')   -- Escape quotes
+    str = str:gsub('\n', '\\n')  -- Escape newlines
+    str = str:gsub('\r', '\\r')  -- Escape carriage returns
+    str = str:gsub('\t', '\\t')  -- Escape tabs
+    return str
+end
+
+function table_to_oneliner(tbl)
+    -- Serialize using Fusion API
+    local str = bmd.writestring(tbl)
+
+    -- Minify: collapse excessive whitespace
+    str = str:gsub("%s+", " ")   -- collapse all whitespace
+    str = str:gsub(",%s+", ", ") -- keep spacing after commas
+    str = str:gsub("{%s+", "{ ") -- open brace spacing
+    str = str:gsub("%s+}", " }") -- close brace spacing
+
+    -- Optional: trim leading/trailing whitespace
+    str = str:match("^%s*(.-)%s*$")
+
+    return str
+end
+
+function flatten_script_string(src)
+    -- Ensure it's a string
+    if type(src) ~= "string" then return "" end
+
+    -- Remove leading/trailing whitespace
+    local result = src:match("^%s*(.-)%s*$")
+
+    -- Collapse all newlines and excessive spacing
+    result = result:gsub("%s+", " ")   -- All whitespace to space
+    result = result:gsub(",%s+", ", ") -- Tidy comma spacing
+    result = result:gsub("{%s+", "{ ") -- Open brace
+    result = result:gsub("%s+}", " }") -- Close brace
+    result = result:gsub("%s+=", " =") -- Left spacing around =
+    result = result:gsub("=%s+", "= ") -- Right spacing around =
+
+    -- Optional: Escape quotes if needed
+    -- result = result:gsub('"', '\\"')
+
+    return result
+end
+
+local function sendToGoogleSheets(weatherData)
+    -- Build JSON payload as array of arrays (rows)
+    local json_payload
+
+    if type(weatherData) == "table" and #weatherData > 0 then
+        -- Multiple rows of data
+        local rows = {}
+        for i, row in ipairs(weatherData) do
+            local row_str = string.format('["%s", "%s", %d, %d, "%s", "%s"]',
+                row.day or "",
+                row.date or "",
+                row.low or 0,
+                row.high or 0,
+                row.icon or "",
+                row.description or ""
+            )
+            -- row.title or "",
+            --row.image or "",
+            --row.comp or ""
+            table.insert(rows, row_str)
+        end
+        json_payload = "[" .. table.concat(rows, ",") .. "]"
+    else
+        -- Single row of data
+        json_payload = string.format('[["%s", "%s", %d, %d, "%s", "%s"]]',
+            weatherData.day or "MON",
+            weatherData.date or "2024-05-03",
+            weatherData.low or 48,
+            weatherData.high or 165,
+            weatherData.icon or "sun",
+            weatherData.description or "Sunny"
+
+        )
+        -- weatherData.title or "no title",
+        -- weatherData.image or "no Image",
+        -- weatherData.comp or "no Comp"
+    end
+
+    -- Your Google Apps Script URL
+    local url =
+    "https://script.google.com/macros/s/AKfycbz-kYN0ahYiUrfcc0weEvYaIByIyfOELyTl8U0G5ErfsJypcqKSWQiQBLT71jkO9uk6eA/exec"
+
+    -- Escape the entire JSON payload for shell
+    local escaped_payload = escapeJsonForShell(json_payload)
+
+    -- Compose curl command with redirect following and better error handling
+    local cmd = string.format(
+        [[curl -s -L -w "%%{http_code}" -X POST -H "Content-Type: application/json" -d "%s" "%s" 2>&1]],
+        escaped_payload, url)
+
+    print("Sending data to Google Sheets...")
+    print("JSON payload:", json_payload)
+
+    -- Execute curl command
+    local handle = io.popen(cmd)
+    if not handle then
+        print("ERROR: Failed to execute curl command")
+        return false
+    end
+
+    local result = handle:read("*a")
+    local success = handle:close()
+    local response = ""
+
+    if not success then
+        print("ERROR: Curl command failed")
+        response = "ERROR: Curl command failed"
+        return false
+    end
+
+    -- Parse response (last 3 characters should be HTTP status code)
+    local response_body = result:sub(1, -4)
+    local http_code = result:sub(-3)
+
+    print("HTTP Status:", http_code)
+    print("Response:", response_body)
+    response = response_body
+
+    if http_code == "200" then
+        print("SUCCESS: Data sent to Google Sheets")
+        response = "SUCCESS: Data sent to Google Sheets"
+
+        return true
+    else
+        print("ERROR: HTTP", http_code)
+        response = "ERROR: HTTP" .. http_code
+        return false
+    end
+    InResponse:SetSource(Text(response), 0)
+end
+
+
+
+
+
+function NotifyChanged(inp, param, time)
+    local ok, err = pcall(function()
+        if inp == SendToGoogle_Button then
+            if param.Value == 1.0 then
+                print("Trigger Request: " .. param.Value)
+                local data = self:FindInput("PasteTools"):GetSource(time, 0).Value
+
+                local setting_string = [[
+{
+    Tools = ordered() {
+        Merge1 = Merge {
+            Inputs = {
+                Background = Input {
+                    SourceOp = "Background1",
+                    Source = "Output",
+                },
+                Foreground = Input {
+                    SourceOp = "FastNoise1",
+                    Source = "Output",
+                },
+                PerformDepthMerge = Input { Value = 0, }
+            },
+            ViewInfo = OperatorInfo { Pos = { 330, 181.5 } },
+        },
+        Background1 = Background {
+            Inputs = {
+                GlobalOut = Input { Value = 119, },
+                Width = Input { Value = 1920, },
+                Height = Input { Value = 1080, },
+                UseFrameFormatSettings = Input { Value = 1, },
+                ["Gamut.SLogVersion"] = Input { Value = FuID { "SLog2" }, }
+            },
+            ViewInfo = OperatorInfo { Pos = { 220, 181.5 } },
+        },
+        FastNoise1 = FastNoise {
+            Inputs = {
+                GlobalOut = Input { Value = 119, },
+                Width = Input { Value = 1920, },
+                Height = Input { Value = 1080, },
+                UseFrameFormatSettings = Input { Value = 1, },
+                ["Gamut.SLogVersion"] = Input { Value = FuID { "SLog2" }, }
+            },
+            ViewInfo = OperatorInfo { Pos = { 220, 148.5 } },
+        }
+    }
+}
+]]
+
+
+
+
+
+
+
+
+
+
+                --print("Data to send: " .. type(data))
+                local oneliner = flatten_script_string(setting_string)
+                local escaped = escapeJsonForShell(oneliner)
+
+                local serialized = bmd.writestring(self:FindInput("PasteTools"):GetSource(time, 0).Value)
+                local jsonstr = jsonutils.encode(data)
+                -- Example 1: Send single row of weather data
+                local singleWeatherData = {
+                    day = "TUE",
+                    date = "2024-05-04",
+                    low = 52,
+                    high = 168,
+                    icon = "cloudy",
+                    description = escaped
+                    --title = "FUSE_NAME",
+                    -- image = self:FindInput("imageCode"):GetSource(time, 0).Value,
+                    --comp = self:FindInput("PasteTools"):GetSource(time, 0).Value,
+
+                }
+                print(flatten_script_string(setting_string))
+                --dump(self:FindInput("PasteTools"):GetSource(time, 0).Value)
+                sendToGoogleSheets(singleWeatherData)
+            end
+        end
+    end)
+    if not ok then
+        print("Error: " .. err)
+    end
+end
+
+function OnConnected(inp, old, new)
+    if inp == InText and new ~= nil then
+        -- New connection
+    else
+        InLabel:SetSource("", 0)
+    end
+end
+
+function OnAddToFlow()
+    InLabel:SetSource("", 0)
+end
+
+-- Get the file extension
+function GetFileType(fileType)
+    local fileExt = ''
+    if fileType == 0 then
+        fileExt = 'jpg'
+    elseif fileType == 1 then
+        fileExt = 'png'
+    elseif fileType == 2 then
+        fileExt = 'gif'
+    else
+        fileExt = 'png'
+    end
+
+    return fileExt
+end
+
+function Process(req)
+    -- [[ Creates the output. ]]
+    local txt_str = InText:GetValue(req).Value
+    -- local fileType = InFileType:GetValue(req).Value
+
+    local html_str = "<img  src='data:image/png;base64," .. tostring(txt_str) .. "'/><br>"
+    local img_str = "data:image/png;base64," .. tostring(txt_str)
+    InImageCode:SetSource(Text(tostring(img_str)), 0)
+
+
+
+    -- local html_str = "<img src='data:image/" .. GetFileType(fileType) .. ";base64," .. tostring(txt_str) .. "'/><br>"
+    InLabel:SetSource(Text(html_str), 0)
+
+    local out = Text(html_str)
+    OutText:Set(req, out)
+end

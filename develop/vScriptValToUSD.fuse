@@ -1,0 +1,367 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+local arrayutils = self and require("varrayutils") or nil
+local textutils = self and require("vtextutils") or nil
+local matrix = self and require("matrix") or nil
+local matrixutils = self and require("vmatrixutils") or nil
+
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vScriptValToUSD"
+DATATYPE = "Text"
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = "ScriptVal",
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\ScriptVal\\Create",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Convert a Fusion ScriptVal object into OpenUSD ASCII Text.",
+    REGS_OpIconString = FUSE_NAME,
+    -- Icon shown in the "Select Tool" dialog and the "Tile Picture"
+    REGS_IconID = "Icons.Tools.Icons.Shape3D",
+})
+
+function Create()
+    -- [[ Creates the user interface. ]]
+    local ConnectionLabel = [[
+<table align="center" cellspacing="8">
+  <tr>
+    <td style="text-align: center;"></td>
+    <td style="text-align: center;">[vMatrixCreateTRS]</td>
+    <td style="text-align: center;"></td>
+  </tr>
+  <tr>
+    <td style="text-align: center;"></td>
+    <td style="text-align: center;">↓</td>
+    <td style="text-align: center;"></td>
+  </tr>
+  <tr>
+    <td style="text-align: center; padding: 5px;">[vScriptValFromOBJ]→ </td>
+    <td style="text-align: center; background-color: #051626; color: white; padding: 5px; font-weight: bold;">[vScriptValToUSD]</td>
+    <td style="text-align: center; padding: 5px;">→ [vTextToFile]</td>
+  </tr>
+</table>
+]]
+    InConnectionLabel = self:AddInput(ConnectionLabel, "ConnectionLabel", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "LabelControl",
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_ControlPage = -1,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    self:BeginControlNest( "Mesh" , "Mesh" , true , {} )
+        InScriptValEdges = self:AddInput("ScriptVal Edges", "ScriptValEdges", {
+            LINKID_DataType = "ScriptVal",
+            INPID_InputControl = "ImageControl",
+            LINK_Main = 1
+        })
+        InScriptValPoints = self:AddInput("ScriptVal Points", "ScriptValPoints", {
+            LINKID_DataType = "ScriptVal",
+            INPID_InputControl = "ImageControl",
+            LINK_Main = 2
+        })
+        InSeparator1 = self:AddInput("UISeparator1", "UISeparator1", {
+            IC_Visible = true,
+            INPID_InputControl = "SeparatorControl",
+            INP_External = false,
+        })
+        InScriptValUVs = self:AddInput("ScriptVal UVs", "ScriptValUV", {
+            LINKID_DataType = "ScriptVal",
+            INPID_InputControl = "ImageControl",
+            LINK_Main = 3,
+        })
+        InScriptValUVEdges = self:AddInput("ScriptVal UV Edges", "ScriptValUVEdges", {
+            LINKID_DataType = "ScriptVal",
+            INPID_InputControl = "ImageControl",
+            LINK_Main = 4,
+        })
+        InSeparator2 = self:AddInput("UISeparator2", "UISeparator2", {
+            IC_Visible = true,
+            INPID_InputControl = "SeparatorControl",
+            INP_External = false,
+        })
+        InMatrix = self:AddInput("Matrix", "Matrix", {
+            LINKID_DataType = "Text",
+            --INPID_InputControl = "TextEditControl",
+            INPID_InputControl = "ImageControl",
+            --TEC_Wrap = true,
+            LINK_Main = 5,
+        })
+    self:EndControlNest()
+    InShowInput = self:AddInput("Show Input", "ShowInput", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true
+    })
+
+    OutText = self:AddOutput("Output", "Output", {
+        LINKID_DataType = DATATYPE,
+        LINK_Main = 1
+    })
+end
+
+function NotifyChanged(inp, param, time)
+    --[[
+        Handles all input control events.
+
+        :param inp: Input that triggered a signal.
+        :type inp: Input
+
+        :param param: Parameter object holding the (new) value.
+        :type param: Parameter
+
+        :param time: Current frame number.
+        :type time: float
+    ]]
+    if inp == InShowInput then
+        local visible
+        if param.Value == 1.0 then visible = true else visible = false end
+        InScriptValEdges:SetAttrs({LINK_Visible = visible})
+        InScriptValPoints:SetAttrs({LINK_Visible = visible})
+        InScriptValUVs:SetAttrs({LINK_Visible = visible})
+        InScriptValUVEdges:SetAttrs({LINK_Visible = visible})
+    end
+end
+
+
+function MatrixTransform(point_tbl, tblMatrix)
+    local result = {}
+
+    if point_tbl and type(point_tbl) == "table" then
+        -- dump("[Point Table]", point_tbl)
+        for _, value in ipairs(point_tbl) do
+            local translateX
+            local translateY
+            local translateZ
+
+            -- dump(value)
+            if #value == 3 then
+                translateX = value[1]
+                translateY = value[2]
+                translateZ = value[3]
+            elseif #value == 2 then
+                translateX = value[1]
+                translateY = value[2]
+                translateZ = 0
+            else
+                -- Fallback
+                translateX = 0
+                translateY = 0
+                translateZ = 0
+            end
+
+            local mx_1 = matrix{
+    {1.0                              , 0.0                              , 0.0                              , 0.0},
+    {0.0                              , 1.0                              , 0.0                              , 0.0},
+    {0.0                              , 0.0                              , 1.0                              , 0.0},
+    {translateX                       , translateY                       , translateZ                       , 1.0}
+    }
+
+           -- dump("[mx_1]", mx_1)
+           -- dump("[mx_2 / tblMatrix]", tblMatrix)
+
+           local mx_1_str = matrixutils.matrix_to_string(mx_1)
+           local mx_2_str = jsonutils.encode(tblMatrix)
+
+           -- dump("[mx_1_str]", mx_1_str)
+           -- dump("[mx_2_str]", mx_2_str)
+
+           -- matrix from interchangeable string
+           local mx_2 = matrixutils.matrix_from_string(mx_2_str)
+
+           -- multiply
+           local mx_product = matrix.mul(mx_1, mx_2)
+
+           -- matrix to interchangeable string
+           -- local mx_product_str = matrixutils.matrix_to_string(mx_product)
+           -- dump("[mx_product_str]", mx_product_str)
+
+           local outTranslateX = mx_product[4][1]
+           local outTranslateY = mx_product[4][2]
+           local outTranslateZ = mx_product[4][3]
+           table.insert(result, {outTranslateX, outTranslateY, outTranslateZ})
+        end
+    end
+
+    return result
+end
+
+function Process(req)
+    -- [[ Creates the output. ]]
+    local tblPoint = InScriptValPoints:GetValue(req):GetValue() or {}
+    local tblEdge = InScriptValEdges:GetValue(req):GetValue() or {}
+    local tblUV = InScriptValUVs:GetValue(req):GetValue() or {}
+    local tblUVEdge = InScriptValUVEdges:GetValue(req):GetValue() or {}
+
+    -- Pixar USD ASCII Export
+    local txt_str = ""
+
+    local primName = "vMograph"
+
+    -- USD ASCII scene scale = CM
+    local metersPerUnit = 0.01
+
+    -- Maya default style Y-axis Up-coordinate system
+    local upAxis = 'Y'
+
+    -- Are polygon faces double sided
+    local doubleSided = 1
+
+    -- Get the comp name like "Composition1"
+    local compName = tostring(self.Comp.Name)
+    -- If Resolve is being used and the comp has no name then add a fallback placeholder
+    if compName == 'nil' then
+        compName = 'Composition1'
+    end
+
+    -- Write a PIXAR USD ASCII header entry
+    txt_str = txt_str .. '#usda 1.0\n'
+    txt_str = txt_str .. '(\n'
+    txt_str = txt_str .. '\tdefaultPrim = "' .. tostring(primName) .. '"\n'
+    txt_str = txt_str .. '\tdoc = """Generated from Composed Stage of root layer ' .. tostring(compName) .. '"""\n'
+    txt_str = txt_str .. '\tmetersPerUnit = ' .. tostring(metersPerUnit) .. '\n'
+    txt_str = txt_str .. '\tupAxis = "' .. tostring(upAxis) .. '"\n'
+    txt_str = txt_str .. ')\n'
+    txt_str = txt_str .. '\n'
+
+    txt_str = txt_str .. 'def Xform "' .. tostring(primName) .. '"\n'
+    txt_str = txt_str .. '{\n'
+
+    txt_str = txt_str .. '\tdef Mesh "mesh" (\n'
+    txt_str = txt_str .. '\t\tprepend apiSchemas = ["MaterialBindingAPI"]\n'
+    txt_str = txt_str .. '\t)\n'
+    txt_str = txt_str .. '\t{\n'
+    txt_str = txt_str .. '\t\tuniform bool doubleSided = ' .. tostring(doubleSided) .. '\n'
+
+    -- Matrix Transform Inputs
+    local tblMatrix = {}
+    if InMatrix:GetValue(req).Value and InMatrix:GetValue(req).Value ~= "" and type(jsonutils.decode(InMatrix:GetValue(req).Value)) == "table" then
+        tblMatrix = jsonutils.decode(InMatrix:GetValue(req).Value)
+    else
+        tblMatrix = {
+            ["rows"] = 4,
+            ["columns"] = 4,
+            ["array"] = {1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1},
+        }
+    end
+
+    -- Edge Array
+    -- Edge Vertex Counts
+    txt_str = txt_str .. '\t\tint[] faceVertexCounts = ['
+    for _, value in ipairs(tblEdge) do
+       txt_str = txt_str .. #value
+        -- Todo: check for last entry in list and skip adding the comma separator
+        if #tblEdge > _ then
+            txt_str = txt_str .. ', '
+        end
+    end
+    txt_str = txt_str .. ']\n'
+    -- Edge Vertex Indicies
+    txt_str = txt_str .. '\t\tint[] faceVertexIndices = ['
+    for _, value in ipairs(tblEdge) do
+        for i, v in ipairs(value) do
+            -- Adjust for index 0 starting array positions
+            txt_str = txt_str .. tostring(tonumber(v) - 1)
+            if #value > i then
+                txt_str = txt_str .. ', '
+            end
+        end
+        -- Todo: check for last entry in list and skip adding the comma separator
+        if #tblEdge > _ then
+            txt_str = txt_str .. ', '
+        end
+    end
+    txt_str = txt_str .. ']\n'
+
+    -- Todo: Add surface normal support
+--    txt_str = txt_str .. '\t\tnormal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1)] (\n'
+--    txt_str = txt_str .. '\t\t    interpolation = "vertex"\n'
+--    txt_str = txt_str .. '\t\t)\n'
+
+    -- Point Array
+    local tblPointXform = MatrixTransform(tblPoint, tblMatrix)
+    txt_str = txt_str .. '\t\tpoint3f[] points = ['
+    for _, value in ipairs(tblPointXform) do
+        if #value == 3 then
+            txt_str = txt_str .. string.format("(%.4f, %.4f, %.4f)", tonumber(value[1]), tonumber(value[2]), tonumber(value[3]))
+        elseif #value == 2 then
+            txt_str = txt_str .. string.format("(%.4f, %.4f, %.4f)", tonumber(value[1]), tonumber(value[2]), 0.0)
+        elseif #value == 1 then
+            txt_str = txt_str .. string.format("(%.4f, %.4f, %.4f)", tonumber(value[1]), 0.0, 0.0)
+        end
+        -- Todo: check for last entry in list and skip adding the comma separator
+        if #tblPointXform > _ then
+            txt_str = txt_str .. ', '
+        end
+    end
+    txt_str = txt_str .. ']\n'
+
+    -- UV Edge Array
+    -- UV Vertex Counts
+    txt_str = txt_str .. '\t\ttexCoord2f[] primvars:st = ['
+    for _, value in ipairs(tblUV) do
+        if #value >= 1 then
+            if #value == 3 then
+                txt_str = txt_str .. string.format("(%.4f, %.4f)", tonumber(value[1]), tonumber(value[2]))
+            elseif #value == 2 then
+                txt_str = txt_str .. string.format("(%.4f, %.4f)", tonumber(value[1]), tonumber(value[2]))
+            elseif #value == 1 then
+                txt_str = txt_str .. string.format("(%.4f, %.4f)", tonumber(value[1]), 0.0)
+            end
+            -- Todo: check for last entry in list and skip adding the comma separator
+            if #tblUV > _ then
+                txt_str = txt_str .. ', '
+            end
+        end
+    end
+    txt_str = txt_str .. '] (\n'
+    txt_str = txt_str .. '\t\t\tinterpolation = "faceVarying"\n'
+    txt_str = txt_str .. '\t\t)\n'
+    -- UV Edge Vertex Indicies
+    txt_str = txt_str .. '\t\tint[] primvars:st:indices = ['
+    for _, value in ipairs(tblUVEdge) do
+        if #value >= 1 then
+            dump(_, #value)
+            for i, v in ipairs(value) do
+                -- Adjust for index 0 starting array positions
+                txt_str = txt_str .. tostring(tonumber(v) - 1)
+                if #value > i then
+                    txt_str = txt_str .. ', '
+                end
+            end
+            -- Todo: check for last entry in list and skip adding the comma separator
+            if #tblUVEdge > _ then
+                txt_str = txt_str .. ', '
+            end
+        end
+    end
+    txt_str = txt_str .. ']\n'
+
+
+
+    -- Write out the USD ASCII footer
+    txt_str = txt_str .. '\t}\n'
+    txt_str = txt_str .. '}\n'
+    txt_str = txt_str .. '\n'
+
+--    print("[ScriptVal Lua Table]")
+--    dump("[tblPoint]", tblPoint)
+--    dump("[tblEdge]", tblEdge)
+--    dump("[tblUV]", tblUV)
+--    dump("[tblUVEdge]", tblUVEdge)
+
+    OutText:Set(req, Text(txt_str))
+end

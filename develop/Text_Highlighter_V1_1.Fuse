@@ -1,0 +1,1000 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local utf8 = require("utf8")
+local chance = require("chance")
+-- ============================================================================
+
+
+FuRegisterClass("Text_Hightlighter_v1_1", CT_Tool, {
+
+    REGS_OpIconString  = "TXH11",
+    REGS_Category      = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_OpDescription = "Text_Hightlighter_v1_1",
+})
+
+function Create()
+    InFontUse = self:AddInput("Font Select", "fontselect", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 1.0,
+        { MBTNC_AddButton = "Use Font",        MBTNCD_ButtonWidth = 1 / 2, },
+        { MBTNC_AddButton = "Use Front Array", MBTNCD_ButtonWidth = 1 / 2, },
+        INP_Integer = true,
+        INP_DoNotifyChanged = true,
+    })
+    InFont = self:AddInput("Font", "Font", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 2,
+        IC_ControlID = 0,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+
+    InFontStyle = self:AddInput("Style", "Style", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FontFileControl",
+        IC_ControlGroup = 2,
+        IC_ControlID = 1,
+        INP_Level = 1,
+        INP_DoNotifyChanged = true,
+    })
+
+
+    InText = self:AddInput("Styled Text", "StyledText", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextEditControl",
+        TEC_Lines = 10,
+        LINK_Main = 2,
+    })
+
+
+    InOffsetLo = self:AddInput("Start", "OffsetLow", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "RangeControl",
+        RNGCS_MidName      = "Write On",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 0,
+        IC_ControlGroup    = 3,
+        IC_ControlID       = 0,
+        --INP_Integer    = true,
+    })
+    InOffsetHi = self:AddInput("End", "OffsetHigh", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "RangeControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        IC_ControlGroup    = 3,
+        IC_ControlID       = 1,
+        --INP_Integer    = true,
+    })
+
+    self:BeginControlNest("Range Selection", "RangeSelection", true, { LBLC_PickButton = false })
+
+    InStart = self:AddInput("Start", "Start", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 1,
+        INP_Integer = true,
+        INP_MinScale = 1,
+        INP_MaxScale = 10,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 1e+38,
+
+    })
+
+    InStop = self:AddInput("Stop", "Stop", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 1,
+        INP_Integer = true,
+        INP_MinScale = 1,
+        INP_MaxScale = 10,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 1e+38,
+
+    })
+
+    InOffsetRange = self:AddInput("Offset Range", "OffsetRange", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0,
+        INP_Integer = true,
+        INP_MinScale = 0,
+        INP_MaxScale = 10,
+        INP_MinAllowed = 0,
+        INP_MaxAllowed = 1e+38,
+
+    })
+    self:EndControlNest()
+
+    self:BeginControlNest("Text Settings", "textsettings", false, {})
+
+    InCase = self:AddInput("Letter Case", "Case", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        { MBTNC_AddButton = "NONE",  MBTNCD_ButtonWidth = 1 / 3, },
+        { MBTNC_AddButton = "UPPER", MBTNCD_ButtonWidth = 1 / 3, },
+        { MBTNC_AddButton = "LOWER", MBTNCD_ButtonWidth = 1 / 3, },
+
+        INP_Integer = true,
+    })
+
+
+
+    InSize = self:AddInput("Size", "Size", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.03,
+    })
+
+    InCharacterSpacing = self:AddInput("Character Spacing", "Characterspacing", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinAllowed = -1,
+        INP_MaxScale = 1.0,
+        INP_Default = 0.0,
+    })
+
+
+    InLineSpacing = self:AddInput("Line Spacing", "linespacing", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = -0.5,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.0,
+
+    })
+
+
+    InWrap_Width = self:AddInput("Width", "wrap_Width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INPID_PreviewControl = "RectangleControl",
+        PC_ControlGroup = 1,
+        PC_ControlID = 0,
+        INP_DoNotifyChanged = true,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+
+    InWrap_Height = self:AddInput("Height", "wrap_Height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INPID_PreviewControl = "RectangleControl",
+        PC_ControlGroup = 1,
+        PC_ControlID = 1,
+        INP_DoNotifyChanged = true,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+
+    --------------------------------------------------------------
+
+    InVer_Justify = self:AddInput("Horizontal Justification", "Hori_Justification", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        { MBTNC_AddButton = "LEFT",   MBTNCD_ButtonWidth = 1 / 3, },
+        { MBTNC_AddButton = "CENTER", MBTNCD_ButtonWidth = 1 / 3, },
+        { MBTNC_AddButton = "RIGHT",  MBTNCD_ButtonWidth = 1 / 3, },
+        INP_Integer = true,
+        INP_DoNotifyChanged = true,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    InHori_adjustment = self:AddInput("Horizontal Adjustment", "Hori_adjustment", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = -0.5,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.0,
+        INPID_PreviewControl = "RectangleControl",
+        PC_ControlGroup = 1,
+        PC_ControlID = 3,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+
+    InHori_offset = self:AddInput("Horizontal Adjustment offset", "Hori_adjustment_offset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = -0.5,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.0,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+
+    InHori_Justify = self:AddInput("Vertical Justification", "Ver_Justification", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "MultiButtonControl",
+        INP_Default = 0.0,
+        { MBTNC_AddButton = "TOP",    MBTNCD_ButtonWidth = 1 / 3, },
+        { MBTNC_AddButton = "CENTER", MBTNCD_ButtonWidth = 1 / 3, },
+        { MBTNC_AddButton = "BOTTOM", MBTNCD_ButtonWidth = 1 / 3, },
+        INP_Integer = true,
+        INP_DoNotifyChanged = true,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    InVer_adjustment = self:AddInput("Vertical Adjustment", "Ver_adjustment", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = -0.5,
+        INP_MaxScale = 0.5,
+        INP_Default = 0.0,
+        INPID_PreviewControl = "RectangleControl",
+        PC_ControlGroup = 1,
+        PC_ControlID = 4,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+    self:EndControlNest()
+
+    self:BeginControlNest("Padding Settings", "Paddingsettings", false, {})
+
+    InPadding = self:AddInput("Padding", "Padding", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 0.0,
+    })
+    InRoundCorner = self:AddInput("Round Corners", "roundCorners", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.0,
+    })
+    InPadding_TB = self:AddInput("Padding Top-Bottom", "Padding_TB", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.0,
+    })
+
+    InPadding_LR = self:AddInput("Padding Left-Right", "Padding_LR", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.0,
+    })
+    InPadding_Yoffset = self:AddInput("Padding Y-Offset", "Padding_Y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 0.1,
+        INP_Default = 0.0,
+    })
+    self:EndControlNest()
+    self:BeginControlNest("Color Settings", "Colorsettings", false, {})
+
+    InR = self:AddInput("Red", "Red", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        ICS_Name           = "Text Color",
+        IC_ControlGroup    = 1,
+        IC_ControlID       = 0,
+    })
+
+    InG = self:AddInput("Green", "Green", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        IC_ControlGroup    = 1,
+        IC_ControlID       = 1,
+    })
+
+    InB = self:AddInput("Blue", "Blue", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        IC_ControlGroup    = 1,
+        IC_ControlID       = 2,
+    })
+
+    InA = self:AddInput("Alpha", "Alpha", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        IC_ControlGroup    = 1,
+        IC_ControlID       = 3,
+    })
+
+
+
+    InR_BG = self:AddInput("Red", "Red_bg", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 0.0,
+        ICS_Name           = "Background Color",
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 0,
+    })
+
+    InG_BG = self:AddInput("Green", "Green_bg", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 0.0,
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 1,
+    })
+
+    InB_BG = self:AddInput("Blue", "Blue_bg", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 2,
+    })
+
+    InA_BG = self:AddInput("Alpha", "Alpha_bg", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 1.0,
+        INP_Default        = 1.0,
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 3,
+    })
+
+
+    -------------DRAW ON TRANSPARENT-------------
+
+    InOnBlack = self:AddInput("Draw on Transparent Background", "OnBlack", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Default        = 0,
+    })
+
+    self:EndControlNest()
+    ---------------------------------------------
+    InPosition = self:AddInput("Position", "Position", {
+        LINKID_DataType = "Point",
+        INPID_InputControl = "OffsetControl",
+        INPID_PreviewControl = "CrosshairControl",
+        INP_DoNotifyChanged = true,
+    })
+
+    InImage = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+    InScriptVal = self:AddInput("ScriptVal", "ScriptVal", {
+        INPID_InputControl = "ImageControl",
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 3,
+    })
+
+    OutImage = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+------------REMAPPER--------------------
+function map_range(a1, a2, b1, b2, s)
+    return b1 + (s - a1) * (b2 - b1) / (a2 - a1)
+end
+
+function d_string_font(text, fontArray, size, cx, cy, char_spacing, pad, padding_TB, padding_LR, _line_spacing,
+                       roundCorners, useSeedOption)
+    -- line_spacing controls vertical spacing between lines (default to 1.5 if not provided)
+    local line_spacing = 1.5 + (_line_spacing or 0)
+    local spacer = 1 + (char_spacing or 0)
+
+    -- This shape will hold the combined text (all characters)
+    local textShape = Shape()
+
+    -- This array holds individual character shapes
+    local shape_holder = {}
+
+    -- This array will hold background rectangles for each word
+    local word_backgrounds = {}
+
+    -- Array to store word objects with their shapes and backgrounds
+    local words = {}
+
+    -- Function to update bounds with a point
+    local function updateBounds(bounds, x, y)
+        bounds.minX = math.min(bounds.minX, x)
+        bounds.minY = math.min(bounds.minY, y)
+        bounds.maxX = math.max(bounds.maxX, x)
+        bounds.maxY = math.max(bounds.maxY, y)
+    end
+
+    -- Overall text bounds
+    local textBounds = {
+        minX = math.huge,
+        minY = math.huge,
+        maxX = -math.huge,
+        maxY = -math.huge
+    }
+
+    -- Split the input text into lines
+    local lines = {}
+    for line in text:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+
+    -- Calculate a reference line height based on the first font (for initial positioning)
+    local refFontInfo = fontArray.Fonts[1]
+    local refFont = TextStyleFont(refFontInfo.Font, refFontInfo.Style)
+
+    --[[
+
+    local requiredChars = "abcdefghijklmnopqrstuvwxyz"
+    local canRenderAll = true
+    for c in requiredChars:gmatch "." do
+        if refFont.HasGlyph and not refFont:HasGlyph(c) then
+            canRenderAll = false
+            break
+        end
+    end
+    if canRenderAll then
+        -- Use this font
+        refFont = TextStyleFont(refFontInfo.Font, refFontInfo.Style)
+    else
+        -- Fallback to a default font if the required characters are not available
+        refFont = TextStyleFont("Open Sans", "Regular")
+        print("Warning: The specified font does not support all required characters. Using Arial as fallback.")
+    end
+
+
+
+    local requiredChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    local fallbackFont = "Open Sans"
+    local fallbackStyle = "Regular"
+
+    for i, fontInfo in ipairs(fontArray.Fonts) do
+        local fontObj = TextStyleFont(fontInfo.Font, fontInfo.Style)
+        local missing = false
+        if fontObj.HasGlyph then
+            for c in requiredChars:gmatch "." do
+                if not fontObj:HasGlyph(c) then
+                    missing = true
+                    break
+                end
+            end
+        end
+        if missing then
+            print(string.format("Warning: Font '%s' (%s) does not support all required characters. Using fallback '%s'.",
+                fontInfo.Font, fontInfo.Style, fallbackFont))
+            fontArray.Fonts[i].Font = fallbackFont
+            fontArray.Fonts[i].Style = fallbackStyle
+        end
+    end
+
+ ]]
+
+
+
+
+
+
+    local refTfm = TextStyleFontMetrics(refFont)
+    local refSize = size -- refFontInfo.Size or fontArray.FontSize
+    local baseLineHeight = refSize * line_spacing
+
+    -- Process each line
+    for line_index, line_text in ipairs(lines) do
+        local y_offset = -(line_index - 1) * baseLineHeight
+        local x_cursor = 0
+        local prev_ch = nil
+        local prev_font_info = nil
+
+        -- Split the line into words
+        local word_list = {}
+        for word in line_text:gmatch("%S+") do
+            table.insert(word_list, word)
+        end
+
+        for word_index, word in ipairs(word_list) do
+            -- Initialize word bounds for current word
+            local wordBounds = {
+                minX = math.huge,
+                minY = math.huge,
+                maxX = -math.huge,
+                maxY = -math.huge
+            }
+
+            local word_start_x = x_cursor
+            local word_shapes = {}
+
+            -- Process each character in the current word
+            for i = 1, #word do
+                -- Adjust character position with text seed if stable distribution is requested
+                local charPos = (line_index * 1000) + (word_index * 100) + i
+                if useSeedOption then
+                    charPos = charPos -- + textSeed
+                end
+                -- Select a random font based on probability for this character
+                local fontInfo = getRandomFont(fontArray, charPos, 0)
+                local size = size --fontInfo.Size or fontArray.FontSize
+                local font = TextStyleFont(fontInfo.Font, fontInfo.Style)
+                local tfm = TextStyleFontMetrics(font)
+
+                local ch = word:byte(i)
+                local cw = tfm:CharacterWidth(ch) * size
+
+                -- Handle kerning between characters with potentially different fonts
+                if prev_ch then
+                    -- For kerning between different fonts, we can either:
+                    -- 1. Use kerning from current font
+                    -- 2. Use no kerning when fonts change
+                    -- 3. Average kerning between the two fonts
+
+                    local kern = 0
+                    if prev_font_info and prev_font_info.Font == fontInfo.Font and
+                        prev_font_info.Style == fontInfo.Style then
+                        -- Same font, use proper kerning
+                        kern = tfm:CharacterKerning(prev_ch, ch) or 0
+                    end
+                    -- Add spacing plus any kerning
+                    x_cursor = x_cursor + (kern + spacer) * size
+                end
+
+                -- Create and transform the character shape
+                local mat = Matrix4()
+                mat:Scale(1.0 / tfm.Scale, 1.0 / tfm.Scale, 1.0)
+                mat:Scale(size, size, 1)
+                mat:Scale(1.9, 1.9, 1)
+                mat:Move(cx, cy, 0)
+
+                local char_mat = Matrix4(mat)
+                char_mat:Move(x_cursor + cw / 2, y_offset, 0)
+                local ch_shape = tfm:GetCharacterShape(ch, false)
+
+                if ch_shape then
+                    ch_shape = ch_shape:TransformOfShape(char_mat)
+
+                    -- Add this character to the composite text shape
+                    textShape:AddShape(ch_shape)
+
+                    -- Store individual character
+                    table.insert(shape_holder, { ch_shape })
+                    table.insert(word_shapes, ch_shape)
+
+                    -- Calculate character bounds
+                    local left = x_cursor
+                    local right = x_cursor + cw
+                    local bottom = y_offset - size / 2 -- Approximation
+                    local top = y_offset + size / 2    -- Approximation
+
+                    -- Update word bounds
+                    updateBounds(wordBounds, left, bottom)
+                    updateBounds(wordBounds, left, top)
+                    updateBounds(wordBounds, right, bottom)
+                    updateBounds(wordBounds, right, top)
+                end
+
+                x_cursor = x_cursor + cw
+                prev_ch = ch
+                prev_font_info = fontInfo
+            end
+
+            -- Add some padding to the word bounds
+            local padding = refSize * pad
+            wordBounds.minX = wordBounds.minX - padding
+            wordBounds.minY = wordBounds.minY - padding
+            wordBounds.maxX = wordBounds.maxX + padding
+            wordBounds.maxY = wordBounds.maxY + padding
+
+            -- Update overall text bounds
+            updateBounds(textBounds, wordBounds.minX, wordBounds.minY)
+            updateBounds(textBounds, wordBounds.maxX, wordBounds.maxY)
+
+            -- Create background rectangle for this word
+            local wordBackgroundRect = Shape()
+            wordBackgroundRect:AddRectangle(
+                wordBounds.minX - padding_LR,
+                wordBounds.maxX + padding_LR,
+                wordBounds.minY - padding_TB,
+                wordBounds.maxY + padding_TB,
+                roundCorners, -- rounded corners
+                8             -- precision
+            )
+
+            local backgroundMat = Matrix4()
+            backgroundMat:Move(cx, cy + (refSize / 2), 0)
+            wordBackgroundRect = wordBackgroundRect:TransformOfShape(backgroundMat)
+
+            -- Store the background rectangle
+            table.insert(word_backgrounds, wordBackgroundRect)
+
+            -- Store word with its shapes and background
+            table.insert(words, {
+                text = word,
+                shapes = word_shapes,
+                background = wordBackgroundRect,
+                bounds = wordBounds,
+                line = line_index
+            })
+
+            -- Add space between words (if not the last word)
+            if word_index < #word_list then
+                -- Use the reference font for spaces
+                local space_width = refTfm:CharacterWidth(32) * refSize -- ASCII 32 is space
+                x_cursor = x_cursor + space_width + spacer * refSize
+                prev_ch = 32                                            -- space character
+            end
+        end
+    end
+
+    return {
+        textShape = textShape,              -- Complete text shape (all characters combined)
+        charShapes = shape_holder,          -- Array of individual character shapes
+        wordBackgrounds = word_backgrounds, -- Array of background rectangles (one per word)
+        words = words,                      -- Complete word objects with shapes and backgrounds
+        bounds = textBounds,                -- Overall text bounds
+        lineCount = #lines                  -- Number of lines processed
+    }
+end
+
+-- Function to get a font based on stable seed (character position and ASCII value)
+function getRandomFont(fontArray, charIndex, charValue)
+    -- Count enabled fonts and normalize probabilities
+    local enabledFonts = {}
+    local totalProbability = 0
+
+    for i, fontInfo in ipairs(fontArray.Fonts) do
+        if fontInfo.Enabled then
+            table.insert(enabledFonts, fontInfo)
+            -- Default to equal probability if not specified
+            fontInfo.Probability = fontInfo.Probability or (1 / fontArray.EnabledFontCount)
+            totalProbability = totalProbability + fontInfo.Probability
+        end
+    end
+
+    -- Normalize probabilities if they don't sum to 1
+    if math.abs(totalProbability - 1.0) > 0.001 then
+        for _, fontInfo in ipairs(enabledFonts) do
+            fontInfo.Probability = fontInfo.Probability / totalProbability
+        end
+    end
+
+    -- Generate a deterministic value between 0-1 based on character and position
+    -- This will be stable across frames for the same character at the same position
+    local seedValue = (charIndex * 13 + charValue * 7) % 100 / 100
+
+
+    -- Select a font based on deterministic seed value
+    local cumulativeProbability = 0
+
+    for _, fontInfo in ipairs(enabledFonts) do
+        cumulativeProbability = cumulativeProbability + fontInfo.Probability
+        if seedValue <= cumulativeProbability then
+            return fontInfo
+        end
+    end
+
+    -- Fallback to first enabled font if something goes wrong
+    return enabledFonts[1]
+end
+
+-- ============================================================================
+
+function Process(req)
+    local img                = InImage:GetValue(req)
+    local fontUse            = InFontUse:GetValue(req).Value
+    local font               = InFont:GetValue(req).Value
+    local style              = InFontStyle:GetValue(req).Value
+    local out                = img:CopyOf()
+
+    local text               = InText:GetValue(req).Value
+    local fontArray          = InScriptVal:GetValue(req):GetValue() or {}
+    local case               = InCase:GetValue(req).Value
+
+    local size               = InSize:GetValue(req).Value
+    local center             = InPosition:GetValue(req)
+    local ver_justify        = InVer_Justify:GetValue(req).Value
+    local hori_justify       = InHori_Justify:GetValue(req).Value
+
+    local hori_adjust        = InHori_adjustment:GetValue(req).Value
+    local hori_adjust_offset = InHori_offset:GetValue(req).Value
+    local ver_adjust         = InVer_adjustment:GetValue(req).Value
+
+    local char_spacing       = InCharacterSpacing:GetValue(req).Value
+    local line_spacing       = InLineSpacing:GetValue(req).Value
+    local padding            = InPadding:GetValue(req).Value
+    local padding_TB         = InPadding_TB:GetValue(req).Value
+    local padding_LR         = InPadding_LR:GetValue(req).Value
+    local padding_Yoffset    = InPadding_Yoffset:GetValue(req).Value
+
+    local roundCorners       = InRoundCorner:GetValue(req).Value
+
+    local r                  = InR:GetValue(req).Value
+    local g                  = InG:GetValue(req).Value
+    local b                  = InB:GetValue(req).Value
+    local a                  = InA:GetValue(req).Value
+
+    local r_bg               = InR_BG:GetValue(req).Value
+    local g_bg               = InG_BG:GetValue(req).Value
+    local b_bg               = InB_BG:GetValue(req).Value
+    local a_bg               = InA_BG:GetValue(req).Value
+
+
+    local offsetmin = InOffsetLo:GetValue(req).Value
+    local offsetmax = InOffsetHi:GetValue(req).Value
+
+
+    local wordwrap_height = InWrap_Height:GetValue(req).Value
+    local wordwrap_width  = InWrap_Width:GetValue(req).Value
+
+    -- Seed the random number generator
+    --local seed            = InSeed:GetValue(req).Value
+    -- math.randomseed(seed)
+    -- Function to generate a random float between -1 and 1
+    local function randomInRange(min, max)
+        return min + (max - min) * math.random()
+    end
+
+
+
+
+    local cx      = center.X
+    local cy      = center.Y * (out.Height * out.YScale) / (out.Width * out.XScale)
+    local quality = 32
+
+    local onblack = (InOnBlack:GetValue(req).Value > 0.5)
+
+    if not next(FontManager:GetFontList()) then
+        FontManager:ScanDir()
+    end
+
+    if req:IsQuick() then
+        quality = 1
+    end
+
+
+
+    ----------------------------DRAW ON TRANSPARENT-------------------------------------
+
+    if onblack then
+        out:Fill(Pixel({ R = 0, G = 0, B = 0, A = 0 }))
+    end
+
+    ------------------------------------------------------------------------------------
+
+    ----------------CASE----------------------------
+
+    local offsetmin_A = math.floor(map_range(0, 1, 0, string.len(text), offsetmin))
+    local offsetmax_A = math.floor(map_range(0, 1, 0, string.len(text), offsetmax))
+
+
+    if case == 0 then
+        text = utf8.sub(text, offsetmin_A, offsetmax_A)
+    elseif case == 1 then
+        text = string.upper(utf8.sub(text, offsetmin_A, offsetmax_A))
+    elseif case == 2 then
+        text = string.lower(utf8.sub(text, offsetmin_A, offsetmax_A))
+    end
+
+
+    ---------------------------------------------------
+    ------------Justification--------------------------
+
+    if ver_justify == 0 then
+        cx = cx - wordwrap_width / 2
+    elseif ver_justify == 1 then
+
+    elseif ver_justify == 2 then
+        cx = cx + wordwrap_width / 2
+    end
+
+
+    if hori_justify == 0 then
+        cy = cy + (wordwrap_height / 4)
+    elseif hori_justify == 1 then
+
+    elseif hori_justify == 2 then
+
+    end
+    ------------------------------------------
+
+    local default_fontArray = {
+        EnabledFontCount = 1,
+        FontSize = 0.03,
+        Fonts = {
+            {
+                Index = 1,
+                Size = 0.0312,
+                Font = font,
+                Enabled = true,
+                Style = style,
+                Probability = 1,
+            },
+
+        },
+        TotalFonts = 1
+    }
+    ---
+    -- If fontArray is empty, use a default font
+    if not fontArray or not fontArray.Fonts or #fontArray.Fonts == 0 or fontUse == 0 then
+        fontArray = default_fontArray
+    end
+
+    local result = d_string_font(text, fontArray, size, cx, cy, char_spacing, padding, padding_TB, padding_LR,
+        line_spacing, roundCorners, true)
+
+    local start = InStart:GetValue(req).Value
+    local stop = InStop:GetValue(req).Value
+    local offset = InOffsetRange:GetValue(req).Value
+    local continue_loop = true
+
+    -- Trim the words array to select a range of words (with backgrounds)
+    local function trim_words(words, _start, _end, _continuous)
+        local trimmed = {}
+        local arr_len = #words
+
+        _start = math.max(1, _start)
+        _end = math.max(_start, _end)
+        for i = _start, _end do
+            local idx
+            if _continuous then
+                idx = ((i - 1) % arr_len) + 1
+            else
+                idx = i
+            end
+            if words[idx] then
+                table.insert(trimmed, words[idx])
+            end
+        end
+        return trimmed
+    end
+
+    -- Trim the wordBackgrounds array to match the trimmed words
+    local function trim_word_backgrounds(wordBackgrounds, _start, _end, _continuous)
+        local trimmed = {}
+        local arr_len = #wordBackgrounds
+
+        _start = math.max(1, _start)
+        _end = math.max(_start, _end)
+        for i = _start, _end do
+            local idx
+            if _continuous then
+                idx = ((i - 1) % arr_len) + 1
+            else
+                idx = i
+            end
+            if wordBackgrounds[idx] then
+                table.insert(trimmed, wordBackgrounds[idx])
+            end
+        end
+        return trimmed
+    end
+
+    -- Trim the words and backgrounds
+    -- local trimmed_words = trim_words(result.words, start + offset, stop + offset, continue_loop)
+    local trimmed_backgrounds = trim_word_backgrounds(result.wordBackgrounds, start + offset, stop + offset,
+        continue_loop)
+
+    -- Add Background rectangles for each trimmed word
+    local sh_bg = Shape()
+    for i = 1, #trimmed_backgrounds do
+        sh_bg:AddShape(trimmed_backgrounds[i], true)
+    end
+
+    local out = img:CopyOf()
+    local ic = ImageChannel(out, 8)
+    local fs = FillStyle()
+    local cs = ChannelStyle()
+
+    ic:SetStyleFill(fs)
+
+    local mat = Matrix4()
+    mat:Identity()
+    mat:Move(0, padding_Yoffset, 0)
+
+
+    cs.Color = Pixel {
+        R = r_bg,
+        G = g_bg,
+        B = b_bg,
+        A = a_bg,
+    }
+
+
+    ic:ShapeFill(sh_bg:TransformOfShape(mat))
+    ic:PutToImage("CM_Merge", cs)
+
+
+    local sh = Shape()
+    local mainShape = result.textShape
+
+    sh:AddShape(result.textShape)
+    cs.Color = Pixel {
+        R = r,
+        G = g,
+        B = b,
+        A = a,
+    }
+
+    mat:Identity()
+    ic:ShapeFill(sh:TransformOfShape(mat))
+    ic:PutToImage("CM_Merge", cs)
+
+
+
+    OutImage:Set(req, out)
+end
+
+function NotifyChanged(inp, param, time)
+    if inp == InFontUse then
+        if param.Value < 0.5 then
+            InFontStyle:SetAttrs({ PC_Visible = true, IC_Visible = true })
+            InFont:SetAttrs({ PC_Visible = true, IC_Visible = true })
+        else
+            InFontStyle:SetAttrs({ PC_Visible = false, IC_Visible = false })
+            InFont:SetAttrs({ PC_Visible = false, IC_Visible = false })
+        end
+    end
+
+    if inp == InFont then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFont:SetSource(Text("Arial"), time)
+        end
+    elseif inp == InFontStyle then
+        local f = param.Value
+        if f == nil or string.len(f) == 0 then
+            InFontStyle:SetSource(Text("Regular"), time)
+        end
+    end
+
+    if inp == InPosition then -- Center moved, update rectangle control position
+        InWrap_Height:SetAttrs({ RCD_SetX = param.X, RCD_SetY = param.Y })
+    elseif inp == InOperation then
+        InWrap_Height:SetAttrs({ PC_Visible = (param.Value < 1) })
+        InPosition:SetAttrs({ PC_Visible = (param.Value < 1) })
+    end
+end
+
+-- Handle input disconnection and initialization
+local function resetInputs()
+    InScriptVal:SetSource(ScriptValParam({}), 0)
+end
+
+function OnConnected(src, newsrc, newdst)
+    if newdst == nil then
+        if src == InScriptVal then
+            InScriptVal:SetSource(ScriptValParam({}), 0)
+        end
+    end
+    return true
+end
+
+function Save()
+    resetInputs()
+end
+
+function OnAddToFlow()
+    resetInputs()
+end

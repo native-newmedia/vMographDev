@@ -1,0 +1,253 @@
+
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+local arrayutils = self and require("varrayutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "Example_HTTPAuthDemo_B"
+DATATYPE = "Text"
+MAX_INPUTS = 24
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+  REGID_DataType      = DATATYPE,
+  REGID_InputDataType = DATATYPE,
+  REG_NoCommonCtrls   = true,
+  REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_Name           = FUSE_NAME,
+   REGS_OpDescription = "Demo fuse for HTTP authentication using libcurl FFI",
+  REGS_OpIconString   = FUSE_NAME,
+  REGS_IconID         = "Icons.Tools.Icons.TextPlus",
+  REG_TimeVariant     = true, -- required to disable caching of the current time parameter
+  REGB_Temporal       = true, -- ensures reliability in Resolve 15,
+    REG_Version = 1,
+})
+-- ============================================================================
+
+
+
+-- Input/Output definitions
+HTTPAuthDemo = Fuse{
+    Inputs = {
+        -- URL to request
+        URL = Input {
+            LINKID_DataType = "Text",
+            INPID_InputControl = "TextControl",
+            TEC_Lines = 1,
+            LINKS_Name = "URL",
+            IC_Default = "https://httpbin.org/bearer",
+        },
+        
+        -- Authentication token
+        AuthToken = Input {
+            LINKID_DataType = "Text",
+            INPID_InputControl = "TextControl",
+            TEC_Lines = 1,
+            LINKS_Name = "Auth Token",
+            IC_Default = "test-token-123",
+        },
+        
+        -- Auth type selection
+        AuthType = Input {
+            LINKID_DataType = "Number",
+            INPID_InputControl = "ComboControl",
+            LINKS_Name = "Auth Type",
+            CCS_AddString = "Bearer Token",
+            CCS_AddString = "API Key Header",
+            CCS_AddString = "Basic Auth",
+            CC_LabelPosition = "Horizontal",
+            IC_Default = 0,
+        },
+        
+        -- Trigger to perform request
+        Execute = Input {
+            LINKID_DataType = "Number",
+            INPID_InputControl = "ButtonControl",
+            LINKS_Name = "Execute Request",
+        },
+        
+        -- Optional: Custom headers
+        CustomHeaders = Input {
+            LINKID_DataType = "Text",
+            INPID_InputControl = "TextControl",
+            TEC_Lines = 3,
+            LINKS_Name = "Custom Headers",
+            IC_Default = "Content-Type: application/json\nUser-Agent: Fusion-Demo/1.0",
+        },
+    },
+    
+    Outputs = {
+        -- Response text
+        Response = Output {
+            LINKID_DataType = "Text",
+            LINKS_Name = "Response",
+        },
+        
+        -- HTTP status code
+        StatusCode = Output {
+            LINKID_DataType = "Number",
+            LINKS_Name = "Status Code",
+        },
+        
+        -- Success/failure indicator
+        Success = Output {
+            LINKID_DataType = "Number",
+            LINKS_Name = "Success",
+        },
+    },
+}
+
+function HTTPAuthDemo:Process(req)
+    local url = self.URL[TIME_UNDEFINED]
+    local token = self.AuthToken[TIME_UNDEFINED]
+    local auth_type = self.AuthType[TIME_UNDEFINED]
+    local execute = self.Execute[TIME_UNDEFINED]
+    local custom_headers = self.CustomHeaders[TIME_UNDEFINED]
+    
+    -- Only execute when button is pressed or inputs change
+    if not execute or execute == 0 then
+        -- Return previous values or defaults
+        self.Response[TIME_UNDEFINED] = Text("Waiting for execution...")
+        self.StatusCode[TIME_UNDEFINED] = 0
+        self.Success[TIME_UNDEFINED] = 0
+        return
+    end
+    
+    -- Perform HTTP request with authentication
+    local response_text, status_code, success = self:MakeAuthenticatedRequest(
+        url, token, auth_type, custom_headers
+    )
+    
+    -- Set outputs
+    self.Response[TIME_UNDEFINED] = Text(response_text)
+    self.StatusCode[TIME_UNDEFINED] = status_code
+    self.Success[TIME_UNDEFINED] = success
+end
+
+function HTTPAuthDemo:MakeAuthenticatedRequest(url, token, auth_type, custom_headers)
+    local ffi = require("ffi")
+    
+    -- Load libcurl (you may need to adjust the library name based on your system)
+    local curl
+    local success_load, err = pcall(function()
+        curl = ffi.load("curl")
+    end)
+    
+    if not success_load then
+        return "Error: Could not load libcurl: " .. tostring(err), 0, 0
+    end
+    
+    -- Define necessary cURL constants and structures
+    ffi.cdef[[
+        typedef void CURL;
+        typedef void curl_slist;
+        
+        typedef enum {
+            CURLOPT_URL = 10002,
+            CURLOPT_HTTPHEADER = 10023,
+            CURLOPT_WRITEDATA = 10001,
+            CURLOPT_WRITEFUNCTION = 20011,
+        } CURLoption;
+        
+        typedef enum {
+            CURLE_OK = 0,
+        } CURLcode;
+        
+        CURL *curl_easy_init(void);
+        CURLcode curl_easy_setopt(CURL *curl, CURLoption option, ...);
+        CURLcode curl_easy_perform(CURL *curl);
+        void curl_easy_cleanup(CURL *curl);
+        curl_slist *curl_slist_append(curl_slist *list, const char *string);
+        void curl_slist_free_all(curl_slist *list);
+        CURLcode curl_easy_getinfo(CURL *curl, int info, ...);
+        
+        typedef size_t (*curl_write_callback)(char *ptr, size_t size, size_t nmemb, void *userdata);
+    ]]
+    
+    -- Initialize cURL
+    local handle = curl.curl_easy_init()
+    if handle == nil then
+        return "Error: Could not initialize cURL", 0, 0
+    end
+    
+    local success_request = false
+    local response_body = {}
+    local status_code = 0
+    
+    pcall(function()
+        -- Set URL
+        curl.curl_easy_setopt(handle, ffi.C.CURLOPT_URL, url)
+        
+        -- Build headers list
+        local headers = nil
+        
+        -- Add authentication header based on type
+        if auth_type == 0 then -- Bearer Token
+            headers = curl.curl_slist_append(headers, "Authorization: Bearer " .. token)
+        elseif auth_type == 1 then -- API Key
+            headers = curl.curl_slist_append(headers, "X-API-Key: " .. token)
+        elseif auth_type == 2 then -- Basic Auth (assuming token is base64 encoded)
+            headers = curl.curl_slist_append(headers, "Authorization: Basic " .. token)
+        end
+        
+        -- Add custom headers if provided
+        if custom_headers and custom_headers ~= "" then
+            for line in custom_headers:gmatch("[^\r\n]+") do
+                if line:trim() ~= "" then
+                    headers = curl.curl_slist_append(headers, line:trim())
+                end
+            end
+        end
+        
+        -- Apply headers to request
+        if headers then
+            curl.curl_easy_setopt(handle, ffi.C.CURLOPT_HTTPHEADER, headers)
+        end
+        
+        -- Set up write callback to capture response
+        local write_callback = ffi.cast("curl_write_callback", function(ptr, size, nmemb, userdata)
+            local data_size = size * nmemb
+            local data = ffi.string(ptr, data_size)
+            table.insert(response_body, data)
+            return data_size
+        end)
+        
+        curl.curl_easy_setopt(handle, ffi.C.CURLOPT_WRITEFUNCTION, write_callback)
+        
+        -- Perform the request
+        local result = curl.curl_easy_perform(handle)
+        
+        if result == ffi.C.CURLE_OK then
+            success_request = true
+            -- Get HTTP status code (this is simplified - you'd need proper getinfo implementation)
+            status_code = 200 -- Placeholder
+        end
+        
+        -- Cleanup
+        if headers then
+            curl.curl_slist_free_all(headers)
+        end
+        write_callback:free()
+    end)
+    
+    -- Cleanup cURL handle
+    curl.curl_easy_cleanup(handle)
+    
+    local response_text = table.concat(response_body)
+    if response_text == "" then
+        response_text = success_request and "Request completed successfully" or "Request failed"
+    end
+    
+    return response_text, status_code, success_request and 1 or 0
+end
+
+-- Helper function for string trimming
+if not string.trim then
+    function string:trim()
+        return self:match("^%s*(.-)%s*$")
+    end
+end

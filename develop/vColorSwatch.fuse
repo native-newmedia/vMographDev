@@ -1,0 +1,349 @@
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vColorSwatch"
+DATATYPE = "ScriptVal"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = "Gradient",
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "View a Gradient object in the Inspector.",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.Background",
+})
+
+reload_fuse = [[
+tool.ScriptReload[fu.TIME_UNDEFINED] = 1
+tool.ScriptReload[fu.TIME_UNDEFINED] = 0
+]]
+
+local grad = Gradient()
+grad:AddColor(0.0, Pixel({ R = 1, G = 0, B = 0, A = 1 }))
+grad:AddColor(0.5, Pixel({ R = 0, G = 1, B = 0, A = 1 }))
+grad:AddColor(1.0, Pixel({ R = 0, G = 0, B = 1, A = 1 }))
+function Create()
+    -- [[ Creates the user interface. ]]
+    self:RemoveControlPage("Controls")
+    self:AddControlPage("Color", { CTID_DIB_ID = "Icons.Tools.Tabs.Color" })
+    self:BeginControlNest("Color Settings", "colorsettings", true, {})
+
+    InGradient = self:AddInput("Gradient", "Gradient", {
+        LINKID_DataType = "Gradient",
+        INPID_InputControl = "GradientControl",
+        LINK_Main = 1,
+        INPP_DefaultParam = grad,
+    })
+    self:EndControlNest()
+
+    InEmptySpace1 = self:AddInput("    ", "EmptySpace1", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "LabelControl",
+        ICD_Width = 0.3,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+    -- Display the image
+    InLabel = self:AddInput("", "Labeltbl", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "LabelControl",
+        LBLC_MultiLine = true,
+        LBLC_Wrap = true,
+        LBLC_WordWrap = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+        INP_DoNotifyChanged = true,
+    })
+
+    InLow = self:AddInput("", "Low", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "RangeControl",
+        INP_Default = 1,
+        INP_MinAllowed = 1,
+        INP_MaxScale = 50,
+        IC_ControlGroup = 200,
+        IC_ControlID = 0,
+        INP_Integer = true,
+        RNGCS_MidName = "I<  Range Selection  >I",
+        IC_NoLabel = true,
+        IC_NoReset = true,
+
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+
+    InHigh = self:AddInput("", "High", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "RangeControl",
+        INP_Default = 50,
+        INP_MinAllowed = 1,
+        INP_MaxScale = 50,
+        IC_ControlGroup = 200,
+        IC_ControlID = 1,
+        INP_Integer = true,
+        IC_Visible = false,
+        PC_Visible = false,
+    })
+
+    InEmptySpace2 = self:AddInput("    ", "EmptySpace2", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "LabelControl",
+        ICD_Width = 0.3,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
+
+    InSubdivColors = self:AddInput("Subdiv Color Range", "subdivColors", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Integer = true,
+        INP_MinScale = 0,
+        INP_MaxScale = 100,
+        INP_MinAllowed = 0,
+        INP_MaxAllowed = 1e+38,
+        INP_Default = 0,
+        INP_DoNotifyChanged = true,
+    })
+
+    BtnReload = self:AddInput("Update UI Range", "UpdateRange", {
+        INPID_InputControl = "ButtonControl",
+        INP_External = false,
+        IC_Visible = true,
+        BTNCS_Execute = reload_fuse,
+        MBTNC_ForceButtons = true,
+        MBTNC_StretchToFit = true,
+        ICD_Width = 1.0,
+        IC_NoLabel = true,
+    })
+
+    InUISeparator1 = self:AddInput("UISeparator1", "UISeparator1", {
+        IC_Visible = true,
+        INPID_InputControl = "SeparatorControl",
+        INP_External = false,
+    })
+
+    InShowDump = self:AddInput("Show Dump", "ShowDump", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 0.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true,
+    })
+
+    OutScriptVal = self:AddOutput("ScriptVal", "ScriptVal", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 1,
+    })
+end
+
+function math.clamp(val, lower, upper)
+    assert(val and lower and upper, "not very useful error message here")
+    if lower > upper then
+        lower, upper = upper, lower
+    end
+    return math.max(lower, math.min(upper, val))
+end
+
+-- ============================================================================
+function Process(req)
+    local gradient = InGradient:GetValue(req)
+    local show_dump = InShowDump:GetValue(req).Value
+    local startIndex = math.floor(InLow:GetValue(req).Value)
+    local stopIndex = math.ceil(InHigh:GetValue(req).Value)
+    local subdivColors = math.max(1, InSubdivColors:GetValue(req).Value)
+
+    local colorCount = gradient:GetColorCount()
+    startIndex = math.max(0, startIndex)
+    stopIndex = math.min(colorCount - 1, stopIndex)
+
+    local tbl = {}
+    local tileSize = 32
+    local maxPerRow = 100
+    local tile_index = 0
+
+    -- HTML header
+    local html_str = [[<html>
+<body>
+<table style="width:100%; border: 1px solid black;">
+<tr style="height:]] .. tostring(tileSize) .. [[px;">]]
+
+    -- Total number of interpolated steps
+    local totalSteps = (stopIndex - startIndex) * subdivColors
+
+    for s = 0, totalSteps do -- <= includes last step!
+        local f = s / totalSteps
+        local exactPos = startIndex + f * (stopIndex - startIndex)
+
+        -- Clamp exactPos to [0, colorCount - 1]
+        exactPos = math.max(0.0, math.min(exactPos, colorCount - 1))
+        local i = math.floor(exactPos)
+        local t = exactPos - i
+
+        local c0 = gradient:GetColor(math.min(i, colorCount - 1))
+        local c1 = gradient:GetColor(math.min(i + 1, colorCount - 1))
+
+        local color = {
+            R = (1 - t) * c0.R + t * c1.R,
+            G = (1 - t) * c0.G + t * c1.G,
+            B = (1 - t) * c0.B + t * c1.B,
+            A = (1 - t) * c0.A + t * c1.A,
+        }
+
+        local normPos = exactPos / (colorCount - 1)
+
+        table.insert(tbl, {
+            -- P = normPos,
+            R = color.R,
+            G = color.G,
+            B = color.B,
+            A = color.A,
+        })
+
+        -- Convert to HTML color
+        local r = math.clamp(math.floor(color.R * 255 + 0.5), 0, 255)
+        local g = math.clamp(math.floor(color.G * 255 + 0.5), 0, 255)
+        local b = math.clamp(math.floor(color.B * 255 + 0.5), 0, 255)
+        local rgb_str = string.format("#%02X%02X%02X", r, g, b)
+
+        html_str = html_str
+            .. [[
+<td style="background-color:]]
+            .. rgb_str
+            .. [[;"><img width="]]
+            .. tostring(tileSize)
+            .. [[" height="]]
+            .. tostring(tileSize)
+            .. [[" src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iAAAABlBMVEUAAAAmRcn2EULJAAAAAnRSTlP/AOW3MEoAAAAJcEhZcwAACxMAAAsTAQCanBgAAAAOSURBVAiZY/j/n4EUBAD9Th/hNOA7twAAAABJRU5ErkJggg=='/></td>
+]]
+
+        tile_index = tile_index + 1
+        if (tile_index % maxPerRow) == 0 then
+            html_str = html_str .. "</tr>\n<tr style='height:" .. tostring(tileSize) .. "px;'>"
+        end
+    end
+    -- HTML footer
+    html_str = html_str .. "</tr>\n</table>\n</body>\n</html>"
+
+    if show_dump == 1 then
+        print("\n----------------------")
+        print("[" .. tostring(self.Name) .. "]")
+        dump(html_str)
+    end
+
+    InLabel:SetSource(Text(html_str), 0)
+    OutScriptVal:Set(req, ScriptValParam(tbl))
+end
+
+function NotifyChanged(inp, param, time)
+    if inp == InShowDump then
+        if param.Value == 1.0 then
+            visible = true
+        else
+            visible = false
+        end
+    end
+end
+
+function OnAddToFlow()
+    local gradlocal = grad
+    -- if InNewTool:GetSource(0).Value >= 0.5 then
+    -- There is no default attribute for gradients. It's always black to white.
+    -- To have a different gradient for new tools, we'll set one up here but
+    -- only once. The "NewTool" flag is cleared immediately afterwards so we
+    -- don't overwrite gradients when the comp is reopened at a later time.
+    gradlocal:AddColor(0.0, Pixel({ R = 1.0, G = 0, B = 0, A = 1 }))
+    gradlocal:AddColor(0.5, Pixel({ R = 0, G = 1.0, B = 0, A = 1 }))
+    gradlocal:AddColor(1.0, Pixel({ R = 0, G = 0, B = 1.0, A = 1 }))
+    InGradient:SetSource(gradlocal, 0, 0)
+    -- InNewTool:SetSource(Number(0.0), 0, 0)
+    -- end
+end
+
+function OnConnected(inp, old, new)
+    --if inp == InScriptVal and new ~= nil then
+    if new ~= nil then
+        -- New connection
+    else
+        --InScriptVal:SetSource(ScriptValParam({}), 0)
+        InLabel:SetSource("", 0)
+    end
+end
+
+function OnDisconnected(inp, old, new)
+    --if inp == InScriptVal and old ~= nil then
+    if old ~= nil then
+        -- Disconnected
+    else
+        --InScriptVal:SetSource(ScriptValParam({}), 0)
+        InLabel:SetSource("", 0)
+    end
+end
+
+function OnDestroy()
+    -- Called when the fuse is destroyed
+    -- InLabel:SetSource("", 0)
+    -- InScriptVal:SetSource(ScriptValParam({}), 0)
+end
+
+function OnReset()
+    -- Called when the fuse is reset
+    -- InLabel:SetSource("", 0)
+    -- InScriptVal:SetSource(ScriptValParam({}), 0)
+end
+
+function OnUpdate()
+    -- Called when the fuse is updated
+    -- InLabel:SetSource("", 0)
+    -- InScriptVal:SetSource(ScriptValParam({}), 0)
+end
+
+function OnInputChanged(inp, param, time)
+    -- Called when an input changes
+    if inp == InGradient then
+        -- InLabel:SetSource("", 0)
+        -- InScriptVal:SetSource(ScriptValParam({}), 0)
+    end
+end
+
+function OnOutputChanged(out, param, time)
+    -- Called when an output changes
+    if out == OutScriptVal then
+        -- InLabel:SetSource("", 0)
+        -- InScriptVal:SetSource(ScriptValParam({}), 0)
+    end
+end
+
+function OnInputConnected(inp, param, time)
+    -- Called when an input is connected
+    if inp == InGradient then
+        -- InLabel:SetSource("", 0)
+        -- InScriptVal:SetSource(ScriptValParam({}), 0)
+    end
+end
+
+function OnInputDisconnected(inp, param, time)
+    -- Called when an input is disconnected
+    if inp == InGradient then
+        -- InLabel:SetSource("", 0)
+        -- InScriptVal:SetSource(ScriptValParam({}), 0)
+    end
+end
+
+function OnOutputConnected(out, param, time)
+    -- Called when an output is connected
+    if out == OutScriptVal then
+        -- InLabel:SetSource("", 0)
+        -- InScriptVal:SetSource(ScriptValParam({}), 0)
+    end
+end

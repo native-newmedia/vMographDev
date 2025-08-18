@@ -1,0 +1,353 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local ffi = require("ffi")
+local curl = require("lj2curl")
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "Example_HTTPRequest_A"
+DATATYPE = "Text"
+MAX_INPUTS = 24
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+  REGID_DataType      = DATATYPE,
+  REGID_InputDataType = DATATYPE,
+  REG_NoCommonCtrls   = true,
+  REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_Name           = FUSE_NAME,
+  REGS_OpDescription  = "Demonstrates using cURL and FFI to request from API",
+  REGS_OpIconString   = FUSE_NAME,
+  REGS_IconID         = "Icons.Tools.Icons.TextPlus",
+  REG_TimeVariant     = true, -- required to disable caching of the current time parameter
+  REGB_Temporal       = true, -- ensures reliability in Resolve 15,
+  REG_Version         = 1,
+})
+-- ============================================================================
+local ConnectionLabel = [[
+<table align="center" cellspacing="8">
+  <tr>
+    <td style="text-align: center;"></td>
+    <td style="text-align: center; background-color: #051626; color: white; padding: 5px; font-weight: bold;">[ ]] ..
+    FUSE_NAME .. [[ ]</td>
+    <td style="text-align: center;">  → </td>
+  </tr>
+</table>
+]]
+-- ============================================================================
+function Create()
+  InLabelConnect = self:AddInput(ConnectionLabel, 'LabelConnect', {
+    LINKID_DataType = 'Text',
+    INPID_InputControl = 'LabelControl',
+    LBLC_MultiLine = true,
+    INP_External = false,
+    INP_Passive = true,
+    IC_ControlPage = -1,
+    IC_NoLabel = true,
+    IC_NoReset = true,
+  })
+  OutMeta = self:AddOutput("Output", "Output", {
+    LINKID_DataType = "Image",
+    LINK_Main = 1,
+  })
+
+  InURL = self:AddInput("URL", "URL", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    TEC_Lines = 3,
+    LBLC_MultiLine = true,
+    TEC_Wrap = true,
+  })
+
+  InAuthToken = self:AddInput("Auth Token", "AuthToken", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    TEC_Lines = 3,
+    LBLC_MultiLine = true,
+    TEC_Wrap = true,
+  })
+  -- Auth type selection
+  InAuthType = self:AddInput("AuthType", "AuthType", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ComboControl",
+    LINKS_Name = "Auth Type",
+    { CCS_AddString = "Bearer Token", },
+    { CCS_AddString = "API Key Header", },
+    { CCS_AddString = "Basic Auth", },
+    INP_Default = 0,
+    INP_Integer = true,
+  })
+
+  -- Optional: Custom headers
+  InCustomHeaders = self:AddInput(" CustomHeaders", "CustomHeaders", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    TEC_Lines = 3,
+    LINKS_Name = "Custom Headers",
+    LBLC_MultiLine = true,
+    TEC_Wrap = true,
+    --IC_Default = "Content-Type: application/json\nUser-Agent: Fusion-Demo/1.0",
+  })
+
+  Inline1Separator1 = self:AddInput("line1Separator1", "line1Separator1", {
+    INPID_InputControl = "SeparatorControl",
+    IC_Visible = true,
+    INP_External = false,
+  })
+
+  InTriggerRequest = self:AddInput("Trigger Request", "Trigger", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ButtonControl",
+    INP_Default = 0,
+    INP_DoNotifyChanged = true,
+    INP_External = false,
+    INP_Integer = true,
+  })
+  Inline1Separator2 = self:AddInput("line1Separator2", "line1Separator2", {
+    INPID_InputControl = "SeparatorControl",
+    IC_Visible = true,
+    INP_External = false,
+  })
+
+  InResponse = self:AddInput("Server Response", "Response", {
+    LINKID_DataType = "Text",
+    INPID_InputControl = "TextEditControl",
+    -- INP_Default = "Response from server will be displayed here",
+    INP_External = false,
+    INP_Integer = false,
+    LBLC_MultiLine = true,
+    TEC_Lines = 10,
+    TEC_Visible = true,
+    TEC_Wrap = true,
+
+
+  })
+end
+
+function NotifyChanged(inp, param, time)
+  local ok, err = pcall(function()
+    if inp == InTriggerRequest then
+      if param.Value == 1.0 then
+        print("Trigger Request: " .. param.Value)
+
+        local ffi = require("ffi")
+        local curl = require("lj2curl")
+
+        ffi.cdef [[
+          typedef unsigned long size_t;
+          typedef size_t (*write_callback_t)(char *ptr, size_t size, size_t nmemb, void *userdata);
+        ]]
+
+        local url = self:FindInput("URL"):GetSource(time, 0).Value or ""
+        local token = self:FindInput("AuthToken"):GetSource(time, 0).Value or ""
+        local auth_type = self:FindInput("AuthType"):GetSource(time, 0).Value or 0
+        local custom_headers = self:FindInput("CustomHeaders"):GetSource(time, 0).Value or ""
+
+        if url == "" then
+          error("URL is empty")
+        end
+
+        print("Starting HTTP request to: " .. url)
+
+        local c = curl.curl_easy_init()
+        if c == nil then
+          error("Failed to initialize cURL")
+        end
+
+        local response_data = {}
+
+        local function write_cb(ptr, size, nmemb, userdata)
+          local length = size * nmemb
+          if length > 0 then
+            local str = ffi.string(ptr, length)
+            table.insert(response_data, str)
+          end
+          return length
+        end
+
+        local c_write_cb = ffi.cast("write_callback_t", write_cb)
+
+        -- HEADER SETUP ==============================================
+        local slist = nil
+
+        -- Standard headers
+        slist = curl.curl_slist_append(slist, "Accept: application/json")
+
+        -- Authentication headers
+        --[[
+        if auth_type == 0 then     -- Bearer token
+          slist = curl.curl_slist_append(slist, "Authorization: Bearer " .. token)
+        elseif auth_type == 1 then -- x-access-token
+          slist = curl.curl_slist_append(slist, "x-access-token: " .. token)
+        end
+        --]]
+
+
+
+        -- Add authentication header based on type
+        if auth_type == 0 then     -- Bearer Token
+          slist = curl.curl_slist_append(slist, "Authorization: Bearer " .. token)
+        elseif auth_type == 1 then -- API Key
+          slist = curl.curl_slist_append(slist, "X-API-Key: " .. token)
+        elseif auth_type == 2 then -- Basic Auth (assuming token is base64 encoded)
+          slist = curl.curl_slist_append(slist, "Authorization: Basic " .. token)
+        end
+
+
+
+
+
+
+
+
+
+
+        -- Custom headers (one per line)
+        if custom_headers ~= "" then
+          for header in custom_headers:gmatch("[^\r\n]+") do
+            slist = curl.curl_slist_append(slist, header)
+          end
+        end
+        -- ==========================================================
+
+        curl.curl_easy_setopt(c, curl.CURLOPT_URL, url)
+        curl.curl_easy_setopt(c, curl.CURLOPT_HTTPHEADER, slist)
+        curl.curl_easy_setopt(c, curl.CURLOPT_WRITEFUNCTION, c_write_cb)
+        curl.curl_easy_setopt(c, curl.CURLOPT_TIMEOUT, 10)
+
+        local res = curl.curl_easy_perform(c)
+        if res ~= 0 then
+          error("cURL error code: " .. tostring(res))
+        end
+
+        curl.curl_slist_free_all(slist)
+        curl.curl_easy_cleanup(c)
+
+        local full_response = table.concat(response_data)
+        print("HTTP Response:\n" .. full_response)
+        InResponse:SetSource(Text(full_response), 0)
+
+        print("Request complete.")
+      end
+    end
+  end)
+
+  if not ok then
+    print("HTTP Request Failed:", err)
+    InResponse:SetSource(Text("Error: " .. tostring(err)), 0)
+  end
+end
+
+-- ============================================================================
+function NotifyChanged_old(inp, param, time)
+  local ok, err = pcall(function()
+    if inp == InTriggerRequest then
+      if param.Value == 1.0 then
+        print("Trigger Request: " .. param.Value)
+        -- =========================================================================
+        -- =========================================================================
+
+        local ffi = require("ffi")
+        local curl = require("lj2curl")
+
+
+        ffi.cdef [[
+  typedef unsigned long size_t;
+  typedef size_t (*write_callback_t)(char *ptr, size_t size, size_t nmemb, void *userdata);
+]]
+
+        local url            = self:FindInput("URL"):GetSource(time, 0).Value or ""
+        local token          = self:FindInput("AuthToken"):GetSource(time, 0).Value or ""
+        local auth_type      = self:FindInput("AuthType"):GetSource(time, 0).Value or 0
+        local custom_headers = self:FindInput("CustomHeaders"):GetSource(time, 0).Value or ""
+
+
+        if url == "" then
+          print("Error: URL is empty")
+          return
+        end
+
+        print("Starting HTTP request to: " .. url)
+
+        local c = curl.curl_easy_init()
+        print("cURL initialized: " .. tostring(c))
+        if c == nil then
+          print("Failed to initialize cURL")
+          return
+        end
+
+        local response_data = {}
+
+        local function write_cb(ptr, size, nmemb, userdata)
+          local length = size * nmemb
+          if length > 0 then
+            local str = ffi.string(ptr, length)
+            table.insert(response_data, str)
+          end
+          return length
+        end
+
+        -- Cast and anchor the callback in a local variable
+        local c_write_cb = ffi.cast("write_callback_t", write_cb)
+
+        -- Set up cURL options
+        local slist = curl.curl_slist_append(nil, "Authorization: Bearer " .. token)
+        slist = curl.curl_slist_append(slist, "Accept: application/json")
+
+        curl.curl_easy_setopt(c, curl.CURLOPT_URL, url)
+        curl.curl_easy_setopt(c, curl.CURLOPT_HTTPHEADER, slist)
+        curl.curl_easy_setopt(c, curl.CURLOPT_WRITEFUNCTION, c_write_cb)
+        curl.curl_easy_setopt(c, curl.CURLOPT_TIMEOUT, 10)
+
+        -- Execute the request
+        local res = curl.curl_easy_perform(c)
+        if res ~= 0 then
+          print("cURL error code: " .. tostring(res))
+        end
+
+        -- Cleanup (no need to free c_write_cb if it's local and scoped)
+        curl.curl_slist_free_all(slist)
+        curl.curl_easy_cleanup(c)
+
+        -- Process response
+        local full_response = table.concat(response_data)
+        print("HTTP Response:\n" .. full_response)
+        -- Optional: Output response to UI
+        InResponse:SetSource(Text(full_response), 0)
+
+        print("Request complete.")
+        -- =========================================================================
+        -- =========================================================================
+      end
+    end
+  end)
+
+  -- Error handling
+  if not ok then
+    print("HTTP Request Failed:", err)
+
+    -- Optional: Output error to UI
+    InResponse:SetSource(Text("Error: " .. tostring(err)), 0)
+  else
+    print("Request completed successfully")
+  end
+end
+
+-- ============================================================================
+--https://apipheny.io/free-api/#apis-without-key
+--https://official-joke-api.appspot.com/random_joke
+-- ============================================================================
+
+function Process(req)
+  -- print("Process function called")
+
+  local imgattrs = {
+    IMG_Document = self.Comp,
+    IMAT_OriginalWidth = 0,
+    IMAT_OriginalHeight = 0,
+  }
+  local out = Image(imgattrs)
+  OutMeta:Set(req, out)
+end

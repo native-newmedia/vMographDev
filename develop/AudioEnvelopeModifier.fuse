@@ -1,0 +1,422 @@
+-- =========================================================================
+-- modules
+-- =========================================================================
+local audio     = require("audio_modifier")
+local jsonutils = self and require("vjsonutils") or nil
+local json      = require("dkjson")
+
+-- =========================================================================
+-- constants
+-- =========================================================================
+FUSE_NAME       = "AudioEnvelopeModifier"
+DATATYPE        = "Image"
+
+-- =========================================================================
+-- fuse registration
+-- =========================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGS_Category      = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name          = FUSE_NAME,
+    REGS_OpIconString  = FUSE_NAME,
+    REGS_OpDescription = "Audio Envelope Modifier (from WAV file)",
+    REG_TimeVariant    = true,
+    REG_Unpredictable  = true,
+    REGS_IconID        = "Icons.Tools.Icons.StickyNote",
+    REG_Version        = 100,
+})
+
+function Create()
+    InAudioFile    = self:AddInput("Audio File", "AudioFile", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "FileControl",
+        FC_IsSaver = false,
+        FC_ClipBrowse = false,
+
+    })
+    InFPS          = self and InFPS or self:AddInput("FPS", "FPS", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 24,
+        INP_MinScale = 1,
+        INP_MaxScale = 120,
+    })
+    InAmplitude    = self:AddInput("Amplitude", "Amp", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 5.0,
+    })
+
+    InLookahead    = self:AddInput("Lookahead (ms)", "Lookahead", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 25.0,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 500.0,
+    })
+
+    InAttack       = self:AddInput("Attack (ms)", "Attack", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 50.0,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1000.0,
+    })
+    InDecay        = self:AddInput("Decay (s)", "Decay", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.1,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 2.0,
+    })
+
+    InSustain      = self:AddInput("Sustain (s)", "Sustain", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.5,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 5.0,
+    })
+
+    InRelease      = self:AddInput("Release (ms)", "Release", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 300.0,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 2000.0,
+    })
+    InMaxAmplitude = self:AddInput("Max Amplitude", "MaxAmplitude", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.1,
+        INP_MaxScale = 5.0,
+    })
+
+    InTotalTime    = self:AddInput("Total Time (s)", "TotalTime", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 4.0,
+        INP_MinScale = 0.1,
+        INP_MaxScale = 10.0,
+    })
+    InScale        = self:AddInput("Scale", "Scale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = -1.0,
+        INP_MinScale = -10.0,
+        INP_MaxScale = 10.0,
+    })
+
+    InOffset       = self:AddInput("Offset", "Offset", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.0,
+        INP_MinScale = -1.0,
+        INP_MaxScale = 1.0,
+    })
+
+
+    InSpeed = self:AddInput("Dot Speed", "Speed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.02,
+        INP_MinScale = 0.001,
+        INP_MaxScale = 0.2,
+    })
+    InItemScale = self:AddInput("ADSR Shape Scale", "ItemScale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+    })
+    InCenter = self:AddInput("ADSR Shape Position", "Center", {
+        LINKID_DataType      = "Point",
+        INPID_InputControl   = "OffsetControl",
+        INPID_PreviewControl = "CrosshairControl",
+        INP_Disabled         = false,
+        IC_Visible           = true,
+        PC_Visible           = true
+    })
+    InShowShape = self:AddInput("Show ADSR Shape", "ShowShape", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Default = 0.0,
+    })
+
+
+
+
+    InImage = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+    OutValue = self:AddOutput("Envelope Output", "Value", {
+        LINKID_DataType = "Number",
+        LINK_Main = 3,
+    })
+
+    OutScriptVal = self:AddOutput("ScriptVal Export", "ScriptVal", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 2,
+    })
+    OutImage = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+local buffer = nil
+local lastFilePath = ""
+local sample_rate = 44100
+local dotYpos = 0
+
+local function load_wav_mono(filepath)
+    local file = io.open(filepath, "rb")
+    if not file then
+        print("[AudioEnvelopeModifier] Error opening file:", filepath)
+        return nil, 0
+    end
+
+    file:read(44) -- Skip WAV header
+    local data = {}
+
+    while true do
+        local bytes = file:read(2)
+        if not bytes then break end
+        local b1, b2 = bytes:byte(1, 2)
+        local sample = (b2 * 256 + b1)
+        if sample >= 32768 then sample = sample - 65536 end
+        sample = sample / 32768
+        table.insert(data, sample)
+    end
+
+    file:close()
+    return data, sample_rate
+end
+
+
+-- Shape rendering
+function CreateADSRShape(ic, attack, decay, sustain, release, maxAmplitude, totalTime, currentTime, shapeScale, cx, cy)
+    local segments = {
+        { 0,                        0,                  attack,                             maxAmplitude,       1,   0, 1 },
+        { attack,                   maxAmplitude,       attack + decay,                     maxAmplitude * 0.7, 1,   0, 0 },
+        { attack + decay,           maxAmplitude * 0.7, attack + decay + sustain,           maxAmplitude * 0.7, 0,   1, 0 },
+        { attack + decay + sustain, maxAmplitude * 0.7, attack + decay + sustain + release, 0,                  0.5, 0, 1 },
+    }
+
+    local cs = ChannelStyle()
+    local mat = Matrix4()
+    mat:Identity()
+    mat:Scale(0.5, 0.5, 1.0)
+
+    mat:Scale(shapeScale, shapeScale, 1.0)
+    mat:Move(cx, cy, 1.0)
+
+    for _, seg in ipairs(segments) do
+        local sh = Shape()
+        sh:MoveTo(seg[1], seg[2])
+        sh:LineTo(seg[3], seg[4])
+        sh = sh:OutlineOfShape(0.01, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+        ic:ShapeFill(sh:TransformOfShape(mat))
+
+
+        cs.Color = Pixel { R = seg[5], G = seg[6], B = seg[7], A = 1 }
+        ic:PutToImage("CM_Merge", cs)
+    end
+
+    local dotX, dotY = 0, 0
+    for _, seg in ipairs(segments) do
+        if currentTime >= seg[1] and currentTime <= seg[3] then
+            local t = (currentTime - seg[1]) / (seg[3] - seg[1])
+            dotX = currentTime
+            dotY = seg[2] + (seg[4] - seg[2]) * t
+            dotYpos=dotY
+            break
+        end
+    end
+
+    local shDot = createCircleShape(dotX, dotY, 0.05)
+    ic:ShapeFill(shDot:TransformOfShape(mat))
+
+    cs.Color = Pixel { R = 0, G = 0, B = 1, A = 1 }
+    ic:PutToImage("CM_Merge", cs)
+end
+
+-- Shape Creation Functions
+function createCircleShape(x, y, radius)
+    local shape = Shape()
+    local segments = 16
+
+    shape:MoveTo(x + radius, y)
+    for i = 1, segments do
+        local angle = (i / segments) * 2 * math.pi
+        shape:LineTo(x + math.cos(angle) * radius, y + math.sin(angle) * radius)
+    end
+    shape:Close()
+
+    return shape
+end
+
+function createSquareShape(x, y, size)
+    local shape = Shape()
+    local half = size / 2
+    shape:AddRectangle(x - half, x + half, y - half, y + half, 0, 8)
+    return shape
+end
+
+function createTriangleShape(x, y, size)
+    local shape = Shape()
+    local height = size * 0.866 -- equilateral triangle height
+
+    shape:MoveTo(x, y + height / 2)
+    shape:LineTo(x - size / 2, y - height / 2)
+    shape:LineTo(x + size / 2, y - height / 2)
+    shape:Close()
+
+    return shape
+end
+
+function convertY(y, ref_img)
+    return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+function Process(req)
+    local img        = InImage:GetValue(req)
+    local out        = img:CopyOf()
+    local audioPath  = InAudioFile:GetValue(req).Value
+
+    local position   = InCenter:GetValue(req)
+    local cx         = position.X
+    local cy         = convertY(position.Y, img)
+    local shapeScale = InItemScale:GetValue(req).Value
+
+
+
+    if audioPath ~= lastFilePath and audioPath ~= "" then
+        print("[AudioEnvelopeModifier] Loading:", audioPath)
+        local x, sr = load_wav_mono(audioPath)
+        if x then
+            buffer = audio.initialize_buffer(x, sr,
+                InAttack:GetValue(req).Value,
+                InRelease:GetValue(req).Value
+            )
+            sample_rate = sr
+            lastFilePath = audioPath
+        else
+            buffer = nil
+        end
+    end
+
+
+
+
+    if not buffer then
+        OutValue:Set(req, 0.0)
+        OutJSON:Set(req, "")
+        return
+    end
+
+    local frame         = req.Time
+
+    local fps           = InFPS:GetValue(req).Value
+    local speed         = InSpeed:GetValue(req).Value
+    local t             = (frame / fps) * speed
+
+    local lookahead     = InLookahead:GetValue(req).Value
+    local scale         = InScale:GetValue(req).Value
+    local offset        = InOffset:GetValue(req).Value
+
+    local totalDuration = InAttack:GetValue(req).Value / 1000
+        + InDecay:GetValue(req).Value
+        + InSustain:GetValue(req).Value
+        + InRelease:GetValue(req).Value / 1000
+
+
+
+    local env = audio.calculate_raw_envelope(t, lookahead, scale, offset, -0.5, buffer)
+    env       = env * InAmplitude:GetValue(req).Value
+    OutValue:Set(req, env)
+
+    local ic = ImageChannel(out, 8)
+    local fs = FillStyle()
+    local cs = ChannelStyle()
+
+    local mat = Matrix4()
+
+
+    --Shape Rendering
+
+    CreateADSRShape(ic,
+        InAttack:GetValue(req).Value / 1000,
+        InDecay:GetValue(req).Value,
+        InSustain:GetValue(req).Value,
+        InRelease:GetValue(req).Value / 1000,
+        InMaxAmplitude:GetValue(req).Value,
+        InTotalTime:GetValue(req).Value,
+        (frame / fps) * speed,
+        shapeScale, cx, cy
+    )
+
+    OutImage:Set(req, out)
+
+    --[[
+    if buffer and buffer[1] and buffer[1][1] then
+        print("Audio samples loaded:", #buffer[1][1])
+    else
+        print("Audio samples missing or buffer not initialized!")
+    end
+    ]]
+
+
+    -- Export buffer as JSON
+    local export = {
+        sample_rate = sample_rate,
+        attack = InAttack:GetValue(req).Value,
+        release = InRelease:GetValue(req).Value,
+        envelope = env,
+        -- samples = buffer[1][1],  -- raw audio samples
+        audio_path = audioPath,
+        lookahead = lookahead,
+        offset = offset,
+        dotYpos=dotYpos,
+
+    }
+
+
+
+    -- OutScriptVal:Set(req, ScriptValParam(export))
+
+    local attack  = InAttack:GetValue(req).Value / 1000
+    local decay   = InDecay:GetValue(req).Value
+    local sustain = InSustain:GetValue(req).Value
+    local release = InRelease:GetValue(req).Value / 1000
+
+    local phase   = ""
+    if t < attack then
+        phase = "Attack"
+    elseif t < attack + decay then
+        phase = "Decay"
+    elseif t < attack + decay + sustain then
+        phase = "Sustain"
+    elseif t < attack + decay + sustain + release then
+        phase = "Release"
+    else
+        phase = "Finished"
+    end
+
+    local envTable = {
+        phase = phase,
+        value = env,
+        time = t,
+        attack = attack,
+        decay = decay,
+        sustain = sustain,
+        release = release,
+        dotYpos=dotYpos,
+    }
+    OutScriptVal:Set(req, ScriptValParam(envTable))
+    -- print(envTable)
+end

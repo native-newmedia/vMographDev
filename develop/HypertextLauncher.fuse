@@ -1,0 +1,38 @@
+-- ============================================================================
+-- HypertextLauncher Fuse - v1.0
+-- This Fuse launches a Lua script from an HTML link using LabelControl.
+-- ============================================================================
+
+FuRegisterClass("HypertextLauncher", CT_Tool, {
+    REGS_Category         = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name             = "Hypertext Launcher",
+    REGS_OpIconString     = "HTL",
+    REGS_OpDescription    = "Add Template Nodes from an HTML link",
+    REG_NoBlendCtrls      = true,
+    REG_NoObjMatCtrls     = true,
+    REG_NoMotionBlurCtrls = true,
+})
+INPUT_Default = [[
+            <p><a href="Execute://AddTemplateNodes()">🚀 Adds Template Setup</a></p><br>
+            <p><a href="RunScript://Fusion://Scripts/Comp/Vonk Ultra/AddTemplateNodes.lua">🚀 Add Template Setup</a></p>
+            <p><a href="AddTool://GridWarp">Add GridWarp node</a></p>
+            <p><a href="Execute://Print([=[Hello World]=])">Print "Hello World" in the Fusion Console</a></p>
+        ]]
+function Create()
+    LaunchTools = self:AddInput(INPUT_Default, "LaunchTools", {
+        INPID_InputControl = "LabelControl",
+        LINKID_DataType = 'Text',
+        
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        --IC_ControlPage = -1,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+        
+    })
+end
+
+function Process(req)
+    -- This Fuse doesn't process images.
+end

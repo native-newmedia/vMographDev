@@ -1,0 +1,206 @@
+-- Insert Tool Before and After Fuse
+-- This fuse adds a tool before and after the currently selected tool
+
+FuRegisterClass("InsertBeforeAfter", CT_Tool, {
+     REGS_Category         = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_OpIconString = "IBA",
+    REGS_OpDescription = "Insert Tool Before and After",
+    REGS_Company = "Custom Fuse",
+    REGS_URL = "",
+    REGS_Help = "Inserts a tool before and after the selected tool",
+    REG_NoObjMatCtrls = true,
+    REG_NoMotionBlurCtrls = true,
+})
+
+function Create()
+    -- Add button control
+    InInsertTools = self:AddInput("Insert Tools", "InsertTools", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ButtonControl",
+        INP_DoNotifyChanged = true,
+        INP_External = false,
+        BTCD_Text = "Insert Before & After",
+    })
+    
+    -- Tool type selection for before tool
+    InBeforeToolType = self:AddInput("Before Tool Type", "BeforeToolType", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextControl",
+        TEC_Lines = 1,
+        INP_Default = "ColorCorrector",
+        INP_External = false,
+    })
+    
+    -- Tool type selection for after tool
+    InAfterToolType = self:AddInput("After Tool Type", "AfterToolType", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "TextControl",
+        TEC_Lines = 1,
+        INP_Default = "ColorCorrector",
+        INP_External = false,
+    })
+    
+    -- Show input checkbox
+    InShowInput = self:AddInput("Show Input", "ShowInput", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1,
+        INP_External = false,
+    })
+    
+    -- Main input (pass-through)
+    InImage = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+    
+    -- Output
+    OutImage = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+-- Find Input with id in tool of type inpType
+function FindInput(tool, id, inpType)
+    for i, input in ipairs(tool:GetInputList(inpType)) do
+        if input.ID == id then
+            return input
+        end
+    end
+    return nil
+end
+
+function GetUpstream(tool)
+    -- the 1 means 1st input in case there are more (merges, dissolves)
+    local inp = tool:FindMainInput(1)
+    -- get output connected to the input
+    local outp = inp and inp:GetConnectedOutput() or nil
+    -- finally get the upstream tool or nil if no tool is connected
+    return (outp and outp:GetTool() or nil)
+end
+
+function GetDownstream(tool)
+    local outp = tool:FindMainOutput(1)
+    if not outp then return {} end
+    
+    local inpTable = outp:GetConnectedInputs()
+    local tools = {}
+    for i, t in ipairs(inpTable) do
+        tools[i] = t:GetTool()
+    end
+    return tools
+end
+
+function getInput(tool, i)
+    -- This returns the main input with index i
+    input = tool:FindMainInput(i)
+    return input
+end
+
+function InsertToolsBeforeAfter()
+   -- local comp = fu.CurrentComp
+     local comp = fu:GetCurrentComp()
+    if not comp then
+        print("No composition found")
+        return
+    end
+    
+    -- Get selected tools
+    local selectedTools = comp:GetToolList(true)
+    if not selectedTools or #selectedTools == 0 then
+        print("No tools selected")
+        return
+    end
+    
+    -- Work with the first selected tool
+    local selectedTool = selectedTools[1]
+    local beforeToolType = InBeforeToolType:GetValue(req).Value
+    local afterToolType = InAfterToolType:GetValue(req).Value
+    
+    print("Selected tool: " .. selectedTool.Name)
+    print("Before tool type: " .. beforeToolType)
+    print("After tool type: " .. afterToolType)
+    
+    comp:StartUndo("Insert Tools Before and After")
+    
+    -- Get upstream and downstream connections
+    local upstreamTool = GetUpstream(selectedTool)
+    local downstreamTools = GetDownstream(selectedTool)
+    
+    -- Create the "before" tool
+    local beforeTool = comp:AddTool(beforeToolType, -32768, -32768)
+    if not beforeTool then
+        print("Failed to create before tool: " .. beforeToolType)
+        comp:EndUndo()
+        return
+    end
+    
+    -- Create the "after" tool
+    local afterTool = comp:AddTool(afterToolType, -32768, -32768)
+    if not afterTool then
+        print("Failed to create after tool: " .. afterToolType)
+        comp:EndUndo()
+        return
+    end
+    
+    -- Position the tools
+    local selectedPos = selectedTool:GetPos()
+    beforeTool:SetPos(selectedPos[1] - 1, selectedPos[2] - 1)
+    afterTool:SetPos(selectedPos[1] + 1, selectedPos[2] + 1)
+    
+    -- Connect the tools
+    -- 1. Connect upstream to before tool
+    if upstreamTool then
+        local upstreamOutput = upstreamTool:FindMainOutput(1)
+        local beforeInput = beforeTool:FindMainInput(1)
+        if upstreamOutput and beforeInput then
+            beforeInput:ConnectTo(upstreamOutput)
+        end
+    end
+    
+    -- 2. Connect before tool to selected tool
+    local beforeOutput = beforeTool:FindMainOutput(1)
+    local selectedInput = selectedTool:FindMainInput(1)
+    if beforeOutput and selectedInput then
+        selectedInput:ConnectTo(beforeOutput)
+    end
+    
+    -- 3. Connect selected tool to after tool
+    local selectedOutput = selectedTool:FindMainOutput(1)
+    local afterInput = afterTool:FindMainInput(1)
+    if selectedOutput and afterInput then
+        afterInput:ConnectTo(selectedOutput)
+    end
+    
+    -- 4. Connect after tool to downstream tools
+    local afterOutput = afterTool:FindMainOutput(1)
+    for _, downstreamTool in ipairs(downstreamTools) do
+        local downstreamInput = downstreamTool:FindMainInput(1)
+        if afterOutput and downstreamInput then
+            downstreamInput:ConnectTo(afterOutput)
+        end
+    end
+    
+    comp:EndUndo()
+    
+    print("Successfully inserted " .. beforeToolType .. " before and " .. afterToolType .. " after " .. selectedTool.Name)
+end
+
+function NotifyChanged(inp, param, time)
+    if inp == InInsertTools then
+        InsertToolsBeforeAfter()
+    end
+end
+
+function Process(req)
+    local img = InImage:GetValue(req)
+    
+    if InShowInput:GetValue(req).Value == 1 then
+        OutImage:Set(req, img)
+    else
+        -- Create a simple pass-through
+        OutImage:Set(req, img)
+    end
+end

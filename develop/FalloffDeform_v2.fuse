@@ -1,0 +1,160 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "FalloffDeform_v2"
+DATATYPE = "Text"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType      = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls   = true,
+    REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name           = FUSE_NAME,
+    REGS_OpDescription  = "Deform point array with falloff modes and 3D preview",
+    REGS_OpIconString   = FUSE_NAME,
+    REGS_IconID         = "Icons.Tools.Icons.sRender",
+    REG_Version         = 101,
+})
+
+function Create()
+
+
+ FalloffMode= self:AddInput("Falloff Mode", "FalloffMode", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ComboControl",
+    INP_Default = 0,
+    INP_Integer = true,
+    { CCS_AddString = "Linear" },
+    { CCS_AddString = "Smoothstep" },
+    { CCS_AddString = "Round" },
+    { CCS_AddString = "Spike" },
+    { CCS_AddString = "Step" },
+  })
+
+ FalloffRadius =self:AddInput("Falloff Radius", "FalloffRadius", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.5,
+    INP_MinScale = 0.0,
+    INP_MaxScale = 1.0,
+  })
+
+ FalloffStrength =self:AddInput("Falloff Strength", "FalloffStrength", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.25,
+    INP_MinScale = -1.0,
+    INP_MaxScale = 1.0,
+  })
+
+ FalloffCenter = self:AddInput("Falloff Center", "FalloffCenter", {
+    LINKID_DataType = "Point",
+    INPID_InputControl = "OffsetControl",
+    INPID_PreviewControl = "CrosshairControl",
+    INP_DefaultX = 0.5,
+    INP_DefaultY = 0.5,
+    IC_Visible = false,
+    PC_Visible = false
+      })
+     InSphere_x = self:AddInput("FallOff Sphere X", "sphere_X", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -1,
+        INP_MaxScale = 1,
+        INP_Default = 0,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+    })
+    InSphere_y = self:AddInput("FallOff Sphere Y", "sphere_y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -1,
+        INP_MaxScale = 1,
+        INP_Default = 0,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+    })
+    InSphere_z = self:AddInput("FallOff Sphere Z", "sphere_z", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -1,
+        INP_MaxScale = 1,
+        INP_Default = 0,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+    })
+    -- Input for JSON array
+  InArray = self:AddInput("Array A", "ArrayA", {
+    LINKID_DataType = "Text",
+    LINK_Main = 1,
+  })
+ Output =self:AddOutput("Output", "Output", {
+    LINKID_DataType = "Text", -- Change to your actual output type
+    LINK_Main = 1,
+  })
+end
+
+function getFalloffWeight(dist, radius, mode)
+  local t = math.max(0, math.min(1, dist / radius))
+  if mode == 0 then
+    return 1 - t
+  elseif mode == 1 then
+    return 1 - (t * t * (3 - 2 * t)) -- smoothstep
+  elseif mode == 2 then
+    return math.sqrt(1 - t * t) -- round falloff
+  elseif mode == 3 then
+    return math.exp(-t * t * 10) -- spike
+  elseif mode == 4 then
+    return (t < 1 and 1 or 0) -- step
+  end
+  return 0
+end
+
+function Process(req)
+  local mode = FalloffMode:GetValue(req).Value
+  local radius = FalloffRadius:GetValue(req).Value
+  local strength = FalloffStrength:GetValue(req).Value
+  local center = FalloffCenter:GetValue(req)
+  local sphere_x = InSphere_x:GetValue(req).Value
+  local sphere_y = InSphere_y:GetValue(req).Value
+  local sphere_z = InSphere_z:GetValue(req).Value
+
+
+    -- Blank img for controls
+    local imgattrs = {
+        IMG_Document = self.Comp,
+        IMAT_OriginalWidth = 0,
+        IMAT_OriginalHeight = 0,
+    }
+    local outimg = Image(imgattrs)
+
+  -- Parse input JSON array
+  local points = jsonutils.decode(InArray:GetValue(req).Value)
+
+  for i, pt in ipairs(points) do
+    local dx = pt[1] - sphere_x
+    local dy = pt[2] - sphere_y
+    local dz = pt[3] - sphere_z
+    local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+
+    local w = getFalloffWeight(dist, radius, mode)
+    pt[1] = pt[1] + dx * w * strength
+    pt[2] = pt[2] + dy * w * strength
+    pt[3] = pt[3] + dz * w * strength
+  end
+
+  -- Print result for debugging
+  for i, pt in ipairs(points) do
+    print(string.format("Point %d: x=%.3f y=%.3f z=%.3f", i, pt[1], pt[2], pt[3]))
+  end
+
+
+  local json_str_out = jsonutils.encode(points)
+  Output:Set(req, Text(json_str_out))
+end

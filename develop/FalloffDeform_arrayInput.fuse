@@ -1,0 +1,190 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "FalloffDeform"
+DATATYPE = "Text"
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+  REGID_DataType      = DATATYPE,
+  REGID_InputDataType = DATATYPE,
+  REG_NoCommonCtrls   = true,
+  REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+  REGS_Name           = FUSE_NAME,
+  REGS_OpDescription  = "Deform point array with falloff modes and 3D preview",
+  REGS_OpIconString   = FUSE_NAME,
+  REGS_IconID         = "Icons.Tools.Icons.sRender",
+  REG_Version         = 101,
+})
+
+function Create()
+  FalloffMode = self:AddInput("Falloff Mode", "FalloffMode", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "ComboControl",
+    INP_Default = 0,
+    INP_Integer = true,
+    { CCS_AddString = "Linear" },
+    { CCS_AddString = "Smoothstep" },
+    { CCS_AddString = "Round" },
+    { CCS_AddString = "Spike" },
+    { CCS_AddString = "Step" },
+  })
+  
+  FalloffRadius = self:AddInput("Falloff Radius", "FalloffRadius", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.5,
+    INP_MinScale = 0.0,
+    INP_MaxScale = 1.0,
+  })
+  
+  FalloffStrength = self:AddInput("Falloff Strength", "FalloffStrength", {
+    LINKID_DataType = "Number",
+    INPID_InputControl = "SliderControl",
+    INP_Default = 0.25,
+    INP_MinScale = -1.0,
+    INP_MaxScale = 1.0,
+  })
+  
+  FalloffCenter = self:AddInput("Falloff Center", "FalloffCenter", {
+    LINKID_DataType = "Point",
+    INPID_InputControl = "OffsetControl",
+    INPID_PreviewControl = "CrosshairControl",
+    INP_DefaultX = 0.5,
+    INP_DefaultY = 0.5,
+    IC_Visible = false,
+    PC_Visible = false
+  })
+       InSphere_x = self:AddInput("FallOff Sphere X", "sphere_X", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -1,
+        INP_MaxScale = 1,
+        INP_Default = 0,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+    })
+    InSphere_y = self:AddInput("FallOff Sphere Y", "sphere_y", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -1,
+        INP_MaxScale = 1,
+        INP_Default = 0,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+    })
+    InSphere_z = self:AddInput("FallOff Sphere Z", "sphere_z", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = -1,
+        INP_MaxScale = 1,
+        INP_Default = 0,
+        INP_MinAllowed = -1e+38,
+        INP_MaxAllowed = 1e+38,
+    })
+  PointsIn = self:AddInput("Points In", "PointsIn", {
+    LINKID_DataType = "Text",
+    LINK_Main = 1,
+    INP_Required = true,
+  })
+  
+  PointsOut = self:AddOutput("Points Out", "PointsOut", {
+    LINKID_DataType = "Text",
+    LINK_Main = 1,
+  })
+end
+
+function getFalloffWeight(dist, radius, mode)
+  if radius == 0 then return 0 end
+  
+  local t = math.max(0, math.min(1, dist / radius))
+  
+  if mode == 0 then
+    -- Linear
+    return 1 - t
+  elseif mode == 1 then
+    -- Smoothstep
+    return 1 - (t * t * (3 - 2 * t))
+  elseif mode == 2 then
+    -- Round
+    return math.sqrt(1 - t * t)
+  elseif mode == 3 then
+    -- Spike
+    return math.exp(-t * t * 10)
+  elseif mode == 4 then
+    -- Step
+    return (t < 1 and 1 or 0)
+  end
+  return 0
+end
+
+function Vector3(x, y, z)
+  return { x = x, y = y, z = z }
+end
+
+function dist3D(p1, p2)
+  local dx = p1.x - p2.x
+  local dy = p1.y - p2.y
+  local dz = p1.z - p2.z
+  return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+function applyFalloff(points, center, radius, strength, mode)
+  local result = {}
+  
+  for i, pt in ipairs(points) do
+    local d = dist3D(pt, center)
+    local w = getFalloffWeight(d, radius, mode)
+    
+    -- Calculate displacement vector from center to point
+    local dx = pt.x - center.x
+    local dy = pt.y - center.y
+    local dz = pt.z - center.z
+    
+    -- Apply falloff-weighted displacement
+    local newPt = 
+      {pt.x + dx * w * strength, pt.y + dy * w * strength, pt.z + dz * w * strength}
+    
+    
+    table.insert(result, newPt)
+  end
+  
+  return result
+end
+
+function Process(req)
+  local inputStr = PointsIn:GetValue(req).Value
+  local input = jsonutils.decode(inputStr)
+  
+  local mode = FalloffMode:GetValue(req).Value
+  local radius = FalloffRadius:GetValue(req).Value
+  local strength = FalloffStrength:GetValue(req).Value
+  local center = FalloffCenter:GetValue(req)
+
+  local sphere_x = InSphere_x:GetValue(req).Value
+  local sphere_y = InSphere_y:GetValue(req).Value
+  local sphere_z = InSphere_z:GetValue(req).Value
+  
+  -- Create 3D center point (use consistent case)
+  local center3D = Vector3(sphere_x, sphere_y, sphere_z)
+  
+  -- Convert input points to Vector3 objects
+  local points = {}
+  for _, p in ipairs(input) do
+    table.insert(points, Vector3(p[1], p[2], p[3] or 0))
+  end
+  
+  -- Apply falloff deformation
+  local result = applyFalloff(points, center3D, radius, strength, mode)
+  
+  -- Encode result back to JSON
+  local json_str_out = jsonutils.encode(result)
+  PointsOut:Set(req, Text(json_str_out))
+end

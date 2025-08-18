@@ -1,0 +1,539 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+local arrayutils = self and require("varrayutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "CircuitBoardPattern_V2"
+DATATYPE = "Text"
+MAX_INPUTS = 24
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType      = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls   = true,
+    REGS_Category       = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name           = FUSE_NAME,
+    REGS_OpDescription  = "Generates abstract circuit board lines and components",
+    REGS_OpIconString   = FUSE_NAME,
+    REGS_IconID         = "Icons.Tools.Icons.TextPlus",
+    REG_TimeVariant     = true, -- required to disable caching of the current time parameter
+    REGB_Temporal       = true, -- ensures reliability in Resolve 15
+})
+-- ============================================================================
+function Create()
+    InSeed = self:AddInput("Random Seed", "Seed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Integer = true,
+        INP_Default = 42,
+        INP_MinAllowed = 0,
+        INP_MaxAllowed = 9999
+    })
+    InAngleMode = self:AddInput("Line Angle Mode", "AngleMode", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ComboControl",
+        INP_Default = 0,
+        INP_Integer = true,
+        { CCS_AddString = "Orthogonal" },
+        { CCS_AddString = "45 Degree" },
+        { CCS_AddString = "Both" },
+    })
+
+    InSpacing = self:AddInput("Spacing", "Spacing", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.1,
+        INP_MinAllowed = 0.01,
+        INP_MaxAllowed = 1.0
+    })
+
+    InGridSize = self:AddInput("Grid Size", "GridSize", {
+        LINKID_DataType = "Point",
+        INPID_InputControl = "OffsetControl",
+        INP_DefaultX = 10,
+        INP_DefaultY = 6
+    })
+    InGridRows = self:AddInput("Grid Rows", "GridRows", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Integer = true,
+        INP_Default = 5,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 100
+    })
+    InGridCols = self:AddInput("Grid Cols", "GridCols", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Integer = true,
+        INP_Default = 5,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 100
+    })
+
+    InCenter = self:AddInput("Center", "Center", {
+        LINKID_DataType = "Point",
+        INPID_InputControl = "OffsetControl",
+        INPID_PreviewControl = "CrosshairControl",
+    })
+    InThickness = self:AddInput("Thickness", "Thickness", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.01,
+        INP_MinAllowed = 0.0001,
+        INP_MaxAllowed = 0.1
+    })
+    InRotation = self:AddInput("Rotation", "Rotation", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale       = 0.0,
+        INP_MaxScale       = 100.0,
+        INP_Default        = 0.0,
+    })
+
+
+
+    self:BeginControlNest("Animation Settings", "Animationsettings", false, {})
+    InTraceStyle = self:AddInput("Trace Style", "TraceStyle", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ComboControl",
+        INP_Default = 0,
+        INP_Integer = true,
+        { CCS_AddString = "Line" },
+        { CCS_AddString = "Conic Curve" },
+        { CCS_AddString = "Bezier Curve" },
+        { CCS_AddString = "Random Mix" },
+    })
+
+    InPulseSpeed = self:AddInput("Pulse Speed", "PulseSpeed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinAllowed = 0.01,
+        INP_MaxAllowed = 10.0
+    })
+
+    InPulseLength = self:AddInput("Pulse Length", "PulseLength", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.1,
+        INP_MinAllowed = 0.01,
+        INP_MaxAllowed = 1.0
+    })
+
+    self:EndControlNest()
+    InR = self:AddInput("Red", "Red", {
+        ICS_Name           = "Color",
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 1.0,
+        INP_MaxScale       = 1.0,
+        CLRC_ShowWheel     = false,
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 0,
+    })
+    InG = self:AddInput("Green", "Green", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.9,
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 1,
+    })
+    InB = self:AddInput("Blue", "Blue", {
+        LINKID_DataType    = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_Default        = 0.6,
+        IC_ControlGroup    = 2,
+        IC_ControlID       = 2,
+    })
+    InImage = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+
+    OutShape = self:AddOutput("Shape", "Shape", {
+        LINKID_DataType = "Shape",
+        LINK_Main = 3
+    })
+
+    OutImage = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1
+    })
+    OutScriptVal = self:AddOutput("ScriptVal", "ScriptVal", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 2
+    })
+end
+
+function convertY(y, ref_img)
+    return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
+end
+
+--[[
+function Process_old(req)
+    local seed = InSeed:GetValue(req).Value
+    math.randomseed(seed)
+
+    local spacing = InSpacing:GetValue(req).Value
+    local gridSize = InGridSize:GetValue(req)
+    local gridRows = InGridRows:GetValue(req).Value
+    local gridCols = InGridCols:GetValue(req).Value
+
+    local cols, rows = math.floor(gridCols), math.floor(gridRows)
+
+    local center = InCenter:GetValue(req)
+    local global_x = center.X
+    local global_y = center.Y
+    local global_scale = 1.0 / math.max(cols, rows) * spacing
+
+    local angleMode = InAngleMode:GetValue(req).Value -- 0 = ortho, 1 = diag, 2 = both
+    local traceStyle = InTraceStyle:GetValue(req).Value
+
+    local thickness = InThickness:GetValue(req).Value
+    local rotation = InRotation:GetValue(req).Value
+    local r = InR:GetValue(req).Value
+    local g = InG:GetValue(req).Value
+    local b = InB:GetValue(req).Value
+
+    local img = InImage:GetValue(req)
+    local out = img:CopyOf()
+    img:Clear()
+
+    local ic = ImageChannel(out, 8)
+    local fs = FillStyle()
+    local cs = ChannelStyle()
+    ic:SetStyleFill(fs)
+    local mat = Matrix4()
+    local shape = Shape()
+
+
+
+
+    local points = {}
+    local pointMap = {}
+    local animatedTraces = {}
+
+
+    for y = 0, rows - 1 do
+        for x = 0, cols - 1 do
+            if math.random() > 0.2 then -- skip ~20% of the grid for irregularity
+                table.insert(points, { x = x * spacing, y = y * spacing })
+                local pt = { x = x * spacing, y = y * spacing }
+                -- pointMap[px .. "," .. py] = pt
+            end
+        end
+    end
+
+    local function findNeighbor(p1, dx, dy)
+        for _, p2 in ipairs(points) do
+            if math.abs(p2.x - (p1.x + dx)) < 0.001 and math.abs(p2.y - (p1.y + dy)) < 0.001 then
+                return p2
+            end
+        end
+        return nil
+    end
+
+    local function drawTrace(shape, p1, p2)
+        shape:MoveTo(Vector2(p1.x, p1.y))
+        if traceStyle == 0 then
+            shape:LineTo(Vector2(p2.x, p2.y))
+        elseif traceStyle == 1 then
+            local mid = Vector2((p1.x + p2.x) / 2 + 0.01, (p1.y + p2.y) / 2 - 0.01)
+            shape:ConicTo(mid, Vector2(p2.x, p2.y))
+        elseif traceStyle == 2 then
+            local dx = (p2.x - p1.x)
+            local dy = (p2.y - p1.y)
+            local ctrl1 = Vector2(p1.x + dx * 0.3, p1.y + dy * 0.2)
+            local ctrl2 = Vector2(p1.x + dx * 0.7, p1.y + dy * 0.8)
+            shape:BezierTo(ctrl1, ctrl2, Vector2(p2.x, p2.y))
+        elseif traceStyle == 3 then
+            local style = math.random(0, 2)
+            drawTrace(shape, p1, p2) -- recursive call with chosen style
+        end
+    end
+
+
+    local function drawConnection(p1, dx, dy)
+        local p2 = findNeighbor(p1, dx, dy)
+        if p2 then
+            shape:MoveTo(Vector2(p1.x, p1.y))
+            shape:LineTo(Vector2(p2.x, p2.y))
+        end
+    end
+
+
+
+    local dx, dy = spacing, spacing
+    if angleMode >= 1 then
+        dx = spacing * 0.7071
+        dy = spacing * 0.7071
+    end
+
+
+    for _, pt in ipairs(points) do
+        if angleMode == 0 or angleMode == 2 then
+            drawConnection(pt, spacing, 0) -- right
+            drawConnection(pt, 0, spacing) -- down
+        end
+        if angleMode == 1 or angleMode == 2 then
+            drawConnection(pt, spacing, spacing)  -- down-right
+            drawConnection(pt, -spacing, spacing) -- down-left
+        end
+
+        -- Component at nodes (optional)
+        if math.random() < 0.1 then
+            shape:AddRectangle(pt.x - spacing * 0.15, pt.x + spacing * 0.15,
+                pt.y - spacing * 0.08, pt.y + spacing * 0.08,
+                spacing * 0.03)
+        end
+    end
+
+
+
+
+    shape:Close()
+
+    shape = shape:OutlineOfShape(thickness, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+
+    -- Transform matrix
+    mat:Identity()
+    mat:RotZ(rotation)
+    mat:Move(global_x, convertY(global_y, img), 0)
+
+
+    cs.Color = Pixel { R = r, G = g, B = b, A = 1 }
+    ic:SetStyleFill(fs)
+    ic:ShapeFill(shape:TransformOfShape(mat))
+    ic:PutToImage("CM_Merge", cs)
+
+
+
+    local data = {
+        shape = shape,
+        points = points,
+        cols = cols,
+        rows = rows,
+        spacing = spacing,
+        global_x = global_x,
+        global_y = global_y,
+        center = center,
+        thickness = thickness,
+        rotation = rotation,
+        r = r,
+        g = g,
+        b = b
+    }
+
+    OutShape:Set(req, shape)
+    OutImage:Set(req, out)
+    OutScriptVal:Set(req, ScriptValParam(data))
+end
+--]]
+function Process(req)
+    local seed = InSeed:GetValue(req).Value
+    math.randomseed(seed)
+
+    local spacing = InSpacing:GetValue(req).Value
+    local gridSize = InGridSize:GetValue(req)
+    local gridRows = InGridRows:GetValue(req).Value
+    local gridCols = InGridCols:GetValue(req).Value
+
+    local cols, rows = math.floor(gridCols), math.floor(gridRows)
+
+    local center = InCenter:GetValue(req)
+    local global_x = center.X
+    local global_y = center.Y
+    local global_scale = 1.0 / math.max(cols, rows) * spacing
+
+    local angleMode = InAngleMode:GetValue(req).Value -- 0 = ortho, 1 = diag, 2 = both
+    local traceStyle = InTraceStyle:GetValue(req).Value
+
+
+
+    local thickness = InThickness:GetValue(req).Value
+    local rotation = InRotation:GetValue(req).Value
+    local r = InR:GetValue(req).Value
+    local g = InG:GetValue(req).Value
+    local b = InB:GetValue(req).Value
+
+    local img = InImage:GetValue(req)
+    local out = img:CopyOf()
+    img:Clear()
+
+    local ic = ImageChannel(out, 8)
+    local fs = FillStyle()
+    local cs = ChannelStyle()
+    ic:SetStyleFill(fs)
+    local mat = Matrix4()
+    local shape = Shape()
+
+    local points = {}
+    local pointMap = {}
+    local animatedTraces = {}
+
+
+    for y = 0, rows - 1 do
+        for x = 0, cols - 1 do
+            if math.random() > 0.2 then
+                local px, py
+                if angleMode >= 1 then
+                    local s = spacing * 0.7071
+                    px = (x - y) * s
+                    py = (x + y) * s
+                else
+                    px = x * spacing
+                    py = y * spacing
+                end
+                local pt = { x = px, y = py }
+                table.insert(points, pt)
+                pointMap[px .. "," .. py] = pt
+            end
+        end
+    end
+
+    local function findNeighbor(p1, dx, dy)
+        local tx, ty = p1.x + dx, p1.y + dy
+        return pointMap[tx .. "," .. ty]
+    end
+
+    local function drawTrace(shape, p1, p2)
+        shape:MoveTo(Vector2(p1.x, p1.y))
+        if traceStyle == 0 then
+            shape:LineTo(Vector2(p2.x, p2.y))
+        elseif traceStyle == 1 then
+            local mid = Vector2((p1.x + p2.x) / 2 + 0.01, (p1.y + p2.y) / 2 - 0.01)
+            shape:ConicTo(mid, Vector2(p2.x, p2.y))
+        elseif traceStyle == 2 then
+            local dx = (p2.x - p1.x)
+            local dy = (p2.y - p1.y)
+            local ctrl1 = Vector2(p1.x + dx * 0.3, p1.y + dy * 0.2)
+            local ctrl2 = Vector2(p1.x + dx * 0.7, p1.y + dy * 0.8)
+            shape:BezierTo(ctrl1, ctrl2, Vector2(p2.x, p2.y))
+        elseif traceStyle == 3 then
+            local style = math.random(0, 2)
+            drawTrace(shape, p1, p2) -- recursive call with chosen style
+        end
+    end
+
+    -- local shape = Shape()
+    local dx, dy = spacing, spacing
+    if angleMode >= 1 then
+        dx = spacing * 0.7071
+        dy = spacing * 0.7071
+    end
+
+    for _, pt in ipairs(points) do
+        local function attempt(dx, dy)
+            local neighbor = findNeighbor(pt, dx, dy)
+            if neighbor then
+                drawTrace(shape, pt, neighbor)
+                if traceStyle == 0 or traceStyle == 3 then
+                    table.insert(animatedTraces, { start = pt, stop = neighbor })
+                end
+            end
+        end
+
+        if angleMode == 0 or angleMode == 2 then
+            attempt(dx, 0)
+            attempt(0, dy)
+        end
+        if angleMode == 1 or angleMode == 2 then
+            attempt(dx, dy)
+            attempt(-dx, dy)
+        end
+
+        local s = spacing
+        local rs = math.random()
+        if rs < 0.33 then
+            shape:AddRectangle(pt.x - s * 0.1, pt.x + s * 0.1, pt.y - s * 0.1, pt.y + s * 0.1, 0.0)
+        elseif rs < 0.66 then
+            shape:AddRectangle(pt.x - s * 0.08, pt.x + s * 0.08, pt.y - s * 0.08, pt.y + s * 0.08, s * 0.08)
+        else
+            shape:MoveTo(Vector2(pt.x - s * 0.05, pt.y))
+            shape:LineTo(Vector2(pt.x + s * 0.05, pt.y))
+            shape:MoveTo(Vector2(pt.x, pt.y - s * 0.05))
+            shape:LineTo(Vector2(pt.x, pt.y + s * 0.05))
+        end
+    end
+
+
+
+
+    --if not req:IsQuick() then
+    local t = req.Time * InPulseSpeed:GetValue(req).Value % 1.0
+    local pulseLen = InPulseLength:GetValue(req).Value
+    local pulseShape = Shape()
+
+    for _, trace in ipairs(animatedTraces) do
+        local p1 = trace.start
+        local p2 = trace.stop
+        local function lerp(a, b, f) return a + (b - a) * f end
+        local segStart = t
+        local segEnd = (t + pulseLen) % 1.0
+        local function drawSegment(f1, f2)
+            local x1 = lerp(p1.x, p2.x, f1)
+            local y1 = lerp(p1.y, p2.y, f1)
+            local x2 = lerp(p1.x, p2.x, f2)
+            local y2 = lerp(p1.y, p2.y, f2)
+            pulseShape:MoveTo(Vector2(x1, y1))
+            pulseShape:LineTo(Vector2(x2, y2))
+        end
+        if segEnd > segStart then
+            drawSegment(segStart, segEnd)
+        else
+            drawSegment(segStart, 1.0)
+            drawSegment(0.0, segEnd)
+        end
+    end
+    pulseShape:Close()
+    --  OutShape:Set(req, shape + pulseShape)
+
+    pulseShape = pulseShape:OutlineOfShape(thickness, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+    shape:AddShape(pulseShape) --pulseShape
+    -- else
+    -- OutShape:Set(req, shape)
+    -- shape:AddShape(pulseShape)
+    --end
+    shape:Close()
+
+
+    shape = shape:OutlineOfShape(0.001, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+
+    -- Transform matrix
+    mat:Identity()
+    mat:RotZ(rotation)
+    mat:Move(global_x, convertY(global_y, img), 0)
+
+
+    cs.Color = Pixel { R = r, G = g, B = b, A = 1 }
+    ic:SetStyleFill(fs)
+    ic:ShapeFill(shape:TransformOfShape(mat))
+    ic:PutToImage("CM_Merge", cs)
+
+
+
+    local data = {
+        shape = shape,
+        points = points,
+        cols = cols,
+        rows = rows,
+        spacing = spacing,
+        global_x = global_x,
+        global_y = global_y,
+        center = center,
+        thickness = thickness,
+        rotation = rotation,
+        r = r,
+        g = g,
+        b = b
+    }
+
+    OutShape:Set(req, shape)
+    OutImage:Set(req, out)
+    OutScriptVal:Set(req, ScriptValParam(data))
+end
