@@ -1,0 +1,632 @@
+-- ============================================================================
+-- TopographicMapV2.fuse (Improved Version)
+-- Procedural topographic map generator using enhanced Perlin noise with proper contours
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "TopographicMapData_V5"
+DATATYPE = "ScriptVal"
+
+-- Performance and quality constants
+local EPSILON = 1e-6
+local MAX_NOISE_OCTAVES = 8
+local MIN_CONTOUR_INTERVAL = 0.001
+local MAX_CONTOUR_INTERVAL = 0.5
+
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\__dev",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Procedurally generates a topographic map with contour lines from enhanced Perlin noise",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.TextPlus",
+    REG_Version = 210, -- Incremented version
+    REG_TimeVariant = true,
+})
+
+-- ============================================================================
+-- Enhanced Perlin noise generator with proper permutation table
+-- ============================================================================
+local function fade(t)
+    return t * t * t * (t * (t * 6 - 15) + 10)
+end
+
+local function lerp(t, a, b)
+    return a + t * (b - a)
+end
+
+-- Improved gradient function with 8 directions for better quality
+local function grad(hash, x, y)
+    local h = hash % 8
+    local u = (h < 4) and x or y
+    local v = (h < 4) and y or x
+    return ((h % 2 == 0) and u or -u) + ((h % 4 < 2) and 2 * v or -2 * v)
+end
+
+local permutation = {}
+
+-- Enhanced permutation table initialization without duplicates
+local function initPermutation(seed)
+    -- Set seed for reproducible results
+    math.randomseed(seed)
+
+    -- Create proper permutation without duplicates
+    local p = {}
+    for i = 0, 255 do
+        p[i] = i
+    end
+
+    -- Shuffle using Fisher-Yates algorithm
+    for i = 255, 1, -1 do
+        local j = math.random(0, i)
+        p[i], p[j] = p[j], p[i]
+    end
+
+    -- Duplicate for easy indexing with bitwise operations
+    for i = 0, 511 do
+        permutation[i] = p[i % 256]
+    end
+end
+
+-- Enhanced Perlin noise with better bounds checking
+local function perlin(x, y)
+    local xi = math.floor(x) % 255
+    local yi = math.floor(y) % 255
+    local xf = x - math.floor(x)
+    local yf = y - math.floor(y)
+
+    local u = fade(xf)
+    local v = fade(yf)
+
+    -- Use bitwise operations for better performance
+    local aa = permutation[permutation[xi] + yi]
+    local ab = permutation[permutation[xi] + yi + 1]
+    local ba = permutation[permutation[xi + 1] + yi]
+    local bb = permutation[permutation[xi + 1] + yi + 1]
+
+    local x1 = lerp(u, grad(aa, xf, yf), grad(ba, xf - 1, yf))
+    local x2 = lerp(u, grad(ab, xf, yf - 1), grad(bb, xf - 1, yf - 1))
+
+    return (lerp(v, x1, x2) + 1) * 0.5
+end
+
+-- ============================================================================
+-- Enhanced contour tracing using improved marching squares
+-- ============================================================================
+local function getContourPoint(x1, y1, val1, x2, y2, val2, level, width, height)
+    -- Use epsilon for floating-point comparison
+    if math.abs(val1 - val2) < EPSILON then
+        local px = (x1 + x2) * 0.5
+        local py = (y1 + y2) * 0.5
+        return px / width, py / height
+    end
+
+    -- Clamp interpolation parameter
+    local t = math.max(0, math.min(1, (level - val1) / (val2 - val1)))
+    local px = x1 + t * (x2 - x1)
+    local py = y1 + t * (y2 - y1)
+    return px / width, py / height
+end
+
+local function getMarchingSquareCase(tl, tr, bl, br, level)
+    local case = 0
+    if tl >= level then case = case + 1 end
+    if tr >= level then case = case + 2 end
+    if br >= level then case = case + 4 end
+    if bl >= level then case = case + 8 end
+    return case
+end
+
+-- Optimized marching squares with lookup table
+local function getContourSegments(x, y, tl, tr, bl, br, level, width, height)
+    local case = getMarchingSquareCase(tl, tr, bl, br, level)
+
+    -- Early exit for empty cases
+    if case == 0 or case == 15 then
+        return {}
+    end
+
+    local segments = {}
+
+    -- Pre-calculate edge points
+    local top = { getContourPoint(x, y, tl, x + 1, y, tr, level, width, height) }
+    local right = { getContourPoint(x + 1, y, tr, x + 1, y + 1, br, level, width, height) }
+    local bottom = { getContourPoint(x + 1, y + 1, br, x, y + 1, bl, level, width, height) }
+    local left = { getContourPoint(x, y + 1, bl, x, y, tl, level, width, height) }
+
+    -- Lookup table for marching squares cases
+    local marchingSquaresCases = {
+        [1] = { { left, top } },
+        [2] = { { top, right } },
+        [3] = { { left, right } },
+        [4] = { { right, bottom } },
+        [5] = { { left, top }, { right, bottom } },
+        [6] = { { top, bottom } },
+        [7] = { { left, bottom } },
+        [8] = { { left, bottom } },
+        [9] = { { top, bottom } },
+        [10] = { { left, top }, { right, bottom } },
+        [11] = { { right, bottom } },
+        [12] = { { left, right } },
+        [13] = { { top, right } },
+        [14] = { { left, top } }
+    }
+
+    local caseSegments = marchingSquaresCases[case]
+    if caseSegments then
+        for _, segment in ipairs(caseSegments) do
+            table.insert(segments, segment)
+        end
+    end
+
+    return segments
+end
+
+-- ============================================================================
+-- Enhanced multi-octave noise function with better normalization
+-- ============================================================================
+local function fractalNoise(x, y, octaves, persistence, scale, time, speed)
+    local value = 0
+    local amplitude = 1
+    local frequency = 1 / scale
+    local maxValue = 0
+
+    -- Clamp octaves to prevent performance issues
+    octaves = math.min(octaves, MAX_NOISE_OCTAVES)
+
+    for i = 1, octaves do
+        local noiseValue = perlin(
+            x * frequency + time * speed,
+            y * frequency + time * speed
+        )
+        value = value + noiseValue * amplitude
+        maxValue = maxValue + amplitude
+        amplitude = amplitude * persistence
+        frequency = frequency * 2
+    end
+
+    -- Ensure normalized output between 0 and 1
+    return math.max(0, math.min(1, value / maxValue))
+end
+
+-- ============================================================================
+-- Enhanced connectivity analysis for better grouping
+-- ============================================================================
+local function analyzeConnectivity(allSegments)
+    if #allSegments == 0 then
+        return {}
+    end
+
+    local function pointKey(pt)
+        return string.format("%.6f,%.6f", pt[1], pt[2])
+    end
+
+    local function pointsEqual(pt1, pt2)
+        return math.abs(pt1[1] - pt2[1]) < EPSILON and math.abs(pt1[2] - pt2[2]) < EPSILON
+    end
+
+    -- Build connectivity graph with tolerance for floating-point errors
+    local edges = {}
+    local pointCount = {}
+
+    for _, segment in ipairs(allSegments) do
+        local k1 = pointKey(segment[1])
+        local k2 = pointKey(segment[2])
+
+        edges[k1] = edges[k1] or {}
+        edges[k2] = edges[k2] or {}
+        pointCount[k1] = (pointCount[k1] or 0) + 1
+        pointCount[k2] = (pointCount[k2] or 0) + 1
+
+        table.insert(edges[k1], k2)
+        table.insert(edges[k2], k1)
+    end
+
+    -- Trace connected components using DFS
+    local visited = {}
+    local groups = {}
+
+    for k, _ in pairs(edges) do
+        if not visited[k] then
+            local group = {}
+            local stack = { k }
+            visited[k] = true
+
+            while #stack > 0 do
+                local curr = table.remove(stack)
+                table.insert(group, curr)
+
+                for _, neighbor in ipairs(edges[curr] or {}) do
+                    if not visited[neighbor] then
+                        visited[neighbor] = true
+                        table.insert(stack, neighbor)
+                    end
+                end
+            end
+
+            -- Only include groups with more than one point
+            if #group > 1 then
+                table.insert(groups, group)
+            end
+        end
+    end
+
+    return groups
+end
+
+local function buildContourPaths(segments)
+    if #segments == 0 then return {} end
+
+    local function pointKey(pt)
+        return string.format("%.6f,%.6f", pt[1], pt[2])
+    end
+
+    local function pointsEqual(pt1, pt2)
+        return math.abs(pt1[1] - pt2[1]) < EPSILON and math.abs(pt1[2] - pt2[2]) < EPSILON
+    end
+
+    -- Build adjacency list for segments
+    local segmentGraph = {}
+    for i, segment in ipairs(segments) do
+        segmentGraph[i] = {
+            points = { segment[1], segment[2] },
+            connections = {},
+            used = false
+        }
+    end
+
+    -- Find connections between segments
+    for i = 1, #segments do
+        for j = i + 1, #segments do
+            local seg1 = segmentGraph[i]
+            local seg2 = segmentGraph[j]
+
+            -- Check all possible connections
+            if pointsEqual(seg1.points[1], seg2.points[1]) or
+                pointsEqual(seg1.points[1], seg2.points[2]) or
+                pointsEqual(seg1.points[2], seg2.points[1]) or
+                pointsEqual(seg1.points[2], seg2.points[2]) then
+                table.insert(seg1.connections, j)
+                table.insert(seg2.connections, i)
+            end
+        end
+    end
+
+    -- Trace continuous paths
+    local paths = {}
+    for i = 1, #segments do
+        if not segmentGraph[i].used then
+            local path = {}
+            local current = i
+            local prevPoint = nil
+
+            -- Trace forward from this segment
+            while current and not segmentGraph[current].used do
+                segmentGraph[current].used = true
+                local seg = segmentGraph[current]
+
+                -- Add points in correct order
+                if #path == 0 then
+                    table.insert(path, { seg.points[1][1], seg.points[1][2], 0 })
+                    table.insert(path, { seg.points[2][1], seg.points[2][2], 0 })
+                    prevPoint = seg.points[2]
+                else
+                    -- Find which point connects to previous
+                    if pointsEqual(prevPoint, seg.points[1]) then
+                        table.insert(path, { seg.points[2][1], seg.points[2][2], 0 })
+                        prevPoint = seg.points[2]
+                    else
+                        table.insert(path, { seg.points[1][1], seg.points[1][2], 0 })
+                        prevPoint = seg.points[1]
+                    end
+                end
+
+                -- Find next connected segment
+                local next = nil
+                for _, conn in ipairs(seg.connections) do
+                    if not segmentGraph[conn].used then
+                        next = conn
+                        break
+                    end
+                end
+                current = next
+            end
+
+            if #path > 2 then -- Only include meaningful paths
+                table.insert(paths, path)
+            end
+        end
+    end
+
+    return paths
+end
+
+-- ============================================================================
+-- Create with enhanced input validation
+-- ============================================================================
+function Create()
+    InSeed = self:AddInput("Random Seed", "Seed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 42,
+        INP_MinScale = 1,
+        INP_MaxScale = 9999,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = 9999,
+    })
+
+    Inline1Separator_1 = self:AddInput("line1Separator", "line1Separator_1", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InWidth = self:AddInput("Width", "Width", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 64,
+        INP_MaxScale = 2048,
+        INP_Default = 64,
+        INP_MinAllowed = 64,
+        INP_MaxAllowed = 2048,
+        INP_Integer = true,
+    })
+
+    InHeight = self:AddInput("Height", "Height", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 64,
+        INP_MaxScale = 2048,
+        INP_Default = 64,
+        INP_MinAllowed = 64,
+        INP_MaxAllowed = 2048,
+        INP_Integer = true,
+    })
+
+    Inline1Separator_2 = self:AddInput("line1Separator", "line1Separator_2", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InOffsetX = self:AddInput("Offset X", "OffsetX", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+        INP_MinScale = -10.0,
+        INP_MaxScale = 10.0
+    })
+
+    InOffsetY = self:AddInput("Offset Y", "OffsetY", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+        INP_MinScale = -10.0,
+        INP_MaxScale = 10.0
+    })
+
+    InScale = self:AddInput("Noise Scale", "NoiseScale", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 80,
+        INP_MinScale = 1,
+        INP_MaxScale = 300,
+        INP_MinAllowed = 1,
+    })
+
+    Inline1Separator_3 = self:AddInput("line1Separator", "line1Separator_3", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InContourInterval = self:AddInput("Contour Interval", "ContourInterval", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.08,
+        INP_MinScale = 0.01,
+        INP_MinAllowed = MIN_CONTOUR_INTERVAL,
+        INP_MaxAllowed = MAX_CONTOUR_INTERVAL,
+        INP_MaxScale = 0.5
+    })
+
+    InOctaves = self:AddInput("Noise Octaves", "Octaves", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 5,
+        INP_MinScale = 1,
+        INP_MinAllowed = 1,
+        INP_MaxAllowed = MAX_NOISE_OCTAVES,
+        INP_MaxScale = MAX_NOISE_OCTAVES,
+        INP_Integer = true,
+    })
+
+    InPersistence = self:AddInput("Persistence", "Persistence", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.6,
+        INP_MinScale = 0.1,
+        INP_MinAllowed = 0.1,
+        INP_MaxAllowed = 1.0,
+        INP_MaxScale = 1.0
+    })
+
+    Inline1Separator_4 = self:AddInput("line1Separator", "line1Separator_4", {
+        INPID_InputControl = "SeparatorControl",
+        IC_Visible = true,
+        INP_External = false,
+    })
+
+    InAnimSpeed = self:AddInput("Animation Speed", "AnimSpeed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.1,
+        INP_MinScale = 0.0,
+        INP_MinAllowed = 0.0,
+        INP_MaxScale = 1.0
+    })
+
+    InTime = self:AddInput("Noise Time", "Time", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0,
+        INP_MinScale = 0,
+    })
+
+    OutScriptVal = self:AddOutput("ScriptVal Output", "ScriptValOutput", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 1
+    })
+
+    OutScriptValGroups = self:AddOutput("ScriptVal Groups", "ScriptValGroups", {
+        LINKID_DataType = "ScriptVal",
+        LINK_Main = 2
+    })
+end
+
+-- ============================================================================
+-- Enhanced Process function with input validation and error handling
+-- ============================================================================
+function Process(req)
+    -- Input validation with clamping
+    local width = math.max(64, math.min(2048, InWidth:GetValue(req).Value))
+    local height = math.max(64, math.min(2048, InHeight:GetValue(req).Value))
+    local scale = math.max(1, InScale:GetValue(req).Value)
+    local contourStep = math.max(MIN_CONTOUR_INTERVAL,
+        math.min(MAX_CONTOUR_INTERVAL, InContourInterval:GetValue(req).Value))
+    local octaves = math.max(1, math.min(MAX_NOISE_OCTAVES, math.floor(InOctaves:GetValue(req).Value)))
+    local persistence = math.max(0.1, math.min(1.0, InPersistence:GetValue(req).Value))
+    local seed = math.max(1, math.min(9999, InSeed:GetValue(req).Value))
+    local offsetX = InOffsetX:GetValue(req).Value * 10 -- Scale offset for better control
+    local offsetY = InOffsetY:GetValue(req).Value * 10
+
+    -- Initialize enhanced noise system
+    initPermutation(seed)
+
+    -- Get animation parameters
+    local time = req.Time * InTime:GetValue(req).Value
+    local speed = InAnimSpeed:GetValue(req).Value
+
+    -- Build heightmap with enhanced fractal noise
+    local heightmap = {}
+    for y = 1, height do
+        heightmap[y] = {}
+        for x = 1, width do
+            heightmap[y][x] = fractalNoise(
+                x + offsetX,
+                y + offsetY,
+                octaves,
+                persistence,
+                scale,
+                time,
+                speed
+            )
+        end
+    end
+
+    -- Generate contour lines using enhanced marching squares
+    local numLevels = math.floor(1.0 / contourStep)
+    local allSegments = {}
+
+    for i = 1, numLevels do
+        local level = i * contourStep
+
+        -- Process each grid cell with bounds checking
+        for y = 1, height - 1 do
+            for x = 1, width - 1 do
+                local tl = heightmap[y][x]
+                local tr = heightmap[y][x + 1]
+                local bl = heightmap[y + 1][x]
+                local br = heightmap[y + 1][x + 1]
+
+                local segments = getContourSegments(x, y, tl, tr, bl, br, level, width, height)
+
+                for _, segment in ipairs(segments) do
+                    if segment[1] and segment[2] and
+                        segment[1][1] and segment[1][2] and
+                        segment[2][1] and segment[2][2] then
+                        table.insert(allSegments, { segment[1], segment[2] })
+                    end
+                end
+            end
+        end
+    end
+
+    -- Alternative: If you need the original flattened format, deduplicate points
+    -- Uncomment this section and comment out the path-building above if needed
+    ---[[
+    local uniquePoints = {}
+    local pointSet = {}
+
+    for _, segment in ipairs(allSegments) do
+        for _, point in ipairs(segment) do
+            local key = string.format("%.6f,%.6f", point[1], point[2])
+            if not pointSet[key] then
+                pointSet[key] = true
+                table.insert(uniquePoints, { point[1], point[2], 0 })
+            end
+        end
+    end
+
+
+    local function deduplicate_points(points)
+        local seen = {}
+        local result = {}
+
+        for _, p in ipairs(points) do
+            -- Make a string key from the coordinates
+            local key = string.format("%.6f,%.6f,%.6f", p[1], p[2], p[3])
+
+            if not seen[key] then
+                seen[key] = true
+                table.insert(result, p)
+            end
+        end
+
+        return result
+    end
+
+    OutScriptVal:Set(req, ScriptValParam(deduplicate_points(uniquePoints)))
+    ---]]
+
+    --[[
+ local contourPaths = buildContourPaths(allSegments)
+    -- Output as connected line strips
+    local outputPaths = {}
+    for _, path in ipairs(contourPaths) do
+        if #path > 1 then -- Only include paths with multiple points
+            table.insert(outputPaths, path)
+        end
+    end
+    OutScriptVal:Set(req, ScriptValParam(outputPaths))
+--]]
+    -- Enhanced connectivity analysis
+    local groups = analyzeConnectivity(allSegments)
+
+    -- Convert group keys back to coordinates
+    local function keyToCoord(key)
+        local x, y = key:match("([^,]+),([^,]+)")
+        return { tonumber(x), tonumber(y), 0 }
+    end
+
+    local groupsCoords = {}
+    for _, group in ipairs(groups) do
+        local coords = {}
+        for _, key in ipairs(group) do
+            local coord = keyToCoord(key)
+            if coord[1] and coord[2] then
+                table.insert(coords, coord)
+            end
+        end
+        if #coords > 0 then
+            table.insert(groupsCoords, coords)
+        end
+    end
+
+    OutScriptValGroups:Set(req, ScriptValParam(groupsCoords))
+end

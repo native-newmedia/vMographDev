@@ -682,7 +682,7 @@ function Process(req)
     local rectSizeMax         = InRectSizeMax:GetValue(req).Value
     local smallSize           = InSmallSize:GetValue(req).Value
 
-    local scrollGrid          = InScroll:GetValue(req).Value
+    local scrollGrid          = req.Time*InScroll:GetValue(req).Value
     local randomizeDuplicates = InRandomizeDuplicates:GetValue(req).Value == 1
 
     local canvasWidth         = InCanvasWidth:GetValue(req).Value

@@ -1,0 +1,216 @@
+-- ============================================================================
+-- modules
+-- ============================================================================
+local jsonutils = self and require("vjsonutils") or nil
+local arrayutils = self and require("varrayutils") or nil
+-- ============================================================================
+-- constants
+-- ============================================================================
+FUSE_NAME = "vArrayPointsJitter"
+DATATYPE = "Text"
+-- ============================================================================
+-- fuse
+-- ============================================================================
+FuRegisterClass(FUSE_NAME, CT_Tool, {
+    REGID_DataType = DATATYPE,
+    REGID_InputDataType = DATATYPE,
+    REG_NoCommonCtrls = true,
+    REGS_Category = "Kartaverse\\Vonk Ultra\\Mograph\\Array\\Modify",
+    REGS_Name = FUSE_NAME,
+    REGS_OpDescription = "Add jitter to array points.",
+    REGS_OpIconString = FUSE_NAME,
+    REGS_IconID = "Icons.Tools.Icons.TextPlus",
+    REG_Version = 100,
+    REG_TimeVariant = true,
+})
+
+function Create()
+    -- [[ Creates the user interface. ]]
+
+    InData = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1,
+        INP_Required = true,
+    })
+
+    InJitterX = self:AddInput("Jitter X", "jitterx", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0,
+        INP_MaxScale = 1,
+        INP_Default = 0.1,
+        INP_MinAllowed = 0,
+        INP_MaxAllowed = 10,
+        INP_Integer = false,
+    })
+
+    InJitterY = self:AddInput("Jitter Y", "jittery", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0,
+        INP_MaxScale = 1,
+        INP_Default = 0.1,
+        INP_MinAllowed = 0,
+        INP_MaxAllowed = 10,
+        INP_Integer = false,
+    })
+
+    InJitterZ = self:AddInput("Jitter Z", "jitterz", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0,
+        INP_MaxScale = 1,
+        INP_Default = 0.1,
+        INP_MinAllowed = 0,
+        INP_MaxAllowed = 10,
+        INP_Integer = false,
+        IC_Visible = false,
+        PC_Visible = false
+    })
+
+    InSeed = self:AddInput("Seed", "seed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0,
+        INP_MaxScale = 1000,
+        INP_Default = 42,
+        INP_MinAllowed = 0,
+        INP_MaxAllowed = 10000,
+        INP_Integer = true,
+    })
+
+    InTime = self:AddInput("Time", "time", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_MinScale = 0,
+        INP_Default = 0,
+        INP_MinAllowed = 0,
+    })
+    InUniform = self:AddInput("Uniform Jitter", "uniform", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 1.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true,
+    })
+
+    Inline6Separator = self:AddInput("line6Separator", "line6Separator", {
+        INPID_InputControl = "SeparatorControl",
+        INP_External = false,
+        IC_Visible = false,
+    })
+
+    InShowInput = self:AddInput("Show Input", "ShowInput", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 0.0,
+        INP_External = false,
+        INP_DoNotifyChanged = true,
+    })
+
+    OutData = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1,
+    })
+end
+
+function NotifyChanged(inp, param, time)
+    --TODO Check this
+end
+
+-- Simple random number generator using seed
+local rng_state = nil
+
+function seed_rng(seed)
+    rng_state = seed or 42
+end
+
+function random()
+    -- Linear congruential generator
+    rng_state = (rng_state * 1103515245 + 12345) % (2 ^ 31)
+    return rng_state / (2 ^ 31)
+end
+
+function random_range(min_val, max_val)
+    return min_val + (random() * (max_val - min_val))
+end
+
+function Process(req)
+    --[[ Creates the output. ]]
+    local input_data = InData:GetValue(req)
+
+    if not input_data or input_data.Value == "" then
+        OutData:Set(req, Text(""))
+        return
+    end
+
+    local jitter_x = InJitterX:GetValue(req).Value
+    local jitter_y = InJitterY:GetValue(req).Value
+    local jitter_z = InJitterZ:GetValue(req).Value
+    local seed = InSeed:GetValue(req).Value
+    local uniform = InUniform:GetValue(req).Value > 0
+    local time = req.Time * InTime:GetValue(req).Value
+
+    -- Parse input JSON
+    local input_table = jsonutils.decode(input_data.Value)
+
+    if not input_table or not input_table.array then
+        OutData:Set(req, Text(""))
+        return
+    end
+
+    local input_array = input_table.array
+    local result = {}
+
+    for i, point in ipairs(input_array) do
+        local x, y, z = point[1] or 0, point[2] or 0, point[3] or 0
+
+        -- Use a unique seed per point for stable jitter per point
+        seed_rng(seed + i * 10000)
+
+        -- Calculate jitter values
+        local jx, jy, jz
+
+        if uniform then
+            -- Uniform distribution: -jitter to +jitter
+            jx = random_range(-jitter_x, jitter_x)
+            jy = random_range(-jitter_y, jitter_y)
+            jz = random_range(-jitter_z, jitter_z)
+        else
+            -- Gaussian-like distribution (using Box-Muller transform approximation)
+            local u1, u2 = random(), random()
+            local mag = jitter_x * math.sqrt(-2 * math.log(u1))
+            jx = mag * math.cos(2 * math.pi * u2)
+
+            u1, u2 = random(), random()
+            mag = jitter_y * math.sqrt(-2 * math.log(u1))
+            jy = mag * math.cos(2 * math.pi * u2)
+
+            u1, u2 = random(), random()
+            mag = jitter_z * math.sqrt(-2 * math.log(u1))
+            jz = mag * math.cos(2 * math.pi * u2)
+        end
+
+        -- Animate jitter with time
+        local anim_x = math.sin(time + i) * jitter_x * 0.5
+        local anim_y = math.cos(time + i) * jitter_y * 0.5
+        local anim_z = math.sin(time + i) * jitter_z * 0.5
+
+        -- Apply jitter and animation to original coordinates
+        local new_x = x + jx + anim_x
+        local new_y = y + jy + anim_y
+        local new_z = z + jz + anim_z
+
+        table.insert(result, { new_x, new_y, new_z })
+    end
+
+    -- Create output structure
+    local out_Array = {}
+    out_Array["array"] = result
+    out_Array["size"] = arrayutils.Length(result)
+
+    local json_str_out = jsonutils.encode(out_Array)
+    OutData:Set(req, Text(json_str_out))
+end

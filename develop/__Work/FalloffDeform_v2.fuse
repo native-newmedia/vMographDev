@@ -150,9 +150,9 @@ function Process(req)
   end
 
   -- Print result for debugging
-  for i, pt in ipairs(points) do
-    print(string.format("Point %d: x=%.3f y=%.3f z=%.3f", i, pt[1], pt[2], pt[3]))
-  end
+  -- for i, pt in ipairs(points) do
+  --   print(string.format("Point %d: x=%.3f y=%.3f z=%.3f", i, pt[1], pt[2], pt[3]))
+  -- end
 
 
   local json_str_out = jsonutils.encode(points)

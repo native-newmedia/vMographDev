@@ -1,15 +1,12 @@
 -- =========================================================================
 -- modules
 -- =========================================================================
-local audio     = require("audio_modifier")
-local jsonutils = self and require("vjsonutils") or nil
-local json      = require("dkjson")
 
 -- =========================================================================
 -- constants
 -- =========================================================================
-FUSE_NAME       = "ADSRModifier"
-DATATYPE        = "Image"
+FUSE_NAME = "ADSRModifier"
+DATATYPE  = "Image"
 
 -- =========================================================================
 -- fuse registration
@@ -25,9 +22,20 @@ FuRegisterClass(FUSE_NAME, CT_Tool, {
     REG_Version        = 100,
 })
 
+local ConnectionLabel = [[
+<table align="center" cellspacing="8">
+  <tr>
+    <td style="text-align: center;">[Map Dot Y Pos]  → </td>
+    <td style="text-align: center; background-color: #051626; color: white; padding: 5px; font-weight: bold;">[ ]] ..
+    FUSE_NAME .. [[ ]</td>
+    <td style="text-align: center;">  → [ Mapped Value ]</td>
+  </tr>
+</table>
+]]
 function Create()
+    -- [[ Creates the user interface. ]]
 
-    InFPS          = self and InFPS or self:AddInput("FPS", "FPS", {
+    InFPS              = self and InFPS or self:AddInput("FPS", "FPS", {
         LINKID_DataType = "Number",
         INPID_InputControl = "SliderControl",
         INP_Default = 24,
@@ -35,12 +43,14 @@ function Create()
         INP_MaxScale = 120,
     })
 
-    InMaxAmplitude = self:AddInput("Max Amplitude", "MaxAmplitude", {
+    InMaxAmplitude     = self:AddInput("Max Amplitude", "MaxAmplitude", {
         LINKID_DataType = "Number",
         INPID_InputControl = "SliderControl",
         INP_Default = 1.0,
-        INP_MinScale = 0.1,
+        INP_MinScale = 0.0001,
         INP_MaxScale = 5.0,
+        INP_MinAllowed = 0.0001,
+
     })
 
     Inline1Separator_1 = self:AddInput("line1Separator", "line1Separator_1", {
@@ -49,14 +59,14 @@ function Create()
         INP_External = false,
     })
 
-    InAttack       = self:AddInput("Attack (ms)", "Attack", {
+    InAttack           = self:AddInput("Attack (ms)", "Attack", {
         LINKID_DataType = "Number",
         INPID_InputControl = "SliderControl",
         INP_Default = 50.0,
         INP_MinScale = 0.0,
         INP_MaxScale = 1000.0,
     })
-    InDecay        = self:AddInput("Decay (ms)", "Decay", {
+    InDecay            = self:AddInput("Decay (ms)", "Decay", {
         LINKID_DataType = "Number",
         INPID_InputControl = "SliderControl",
         INP_Default = 0.1,
@@ -64,7 +74,7 @@ function Create()
         INP_MaxScale = 2.0,
     })
 
-    InSustain      = self:AddInput("Sustain (ms)", "Sustain", {
+    InSustain          = self:AddInput("Sustain (ms)", "Sustain", {
         LINKID_DataType = "Number",
         INPID_InputControl = "SliderControl",
         INP_Default = 0.5,
@@ -72,7 +82,7 @@ function Create()
         INP_MaxScale = 5.0,
     })
 
-    InRelease      = self:AddInput("Release (ms)", "Release", {
+    InRelease          = self:AddInput("Release (ms)", "Release", {
         LINKID_DataType = "Number",
         INPID_InputControl = "SliderControl",
         INP_Default = 300.0,
@@ -85,15 +95,29 @@ function Create()
         IC_Visible = true,
         INP_External = false,
     })
+    InLabelConnect     = self:AddInput(ConnectionLabel, 'LabelConnect', {
+        LINKID_DataType = 'Text',
+        INPID_InputControl = 'LabelControl',
+        LBLC_MultiLine = true,
+        INP_External = false,
+        INP_Passive = true,
+        IC_NoLabel = true,
+        IC_NoReset = true,
+    })
 
-
-
-    InTotalTime    = self:AddInput("Total Time (s)", "TotalTime", {
+    InMapMin           = self:AddInput("Map Min", "MapMin", {
         LINKID_DataType = "Number",
         INPID_InputControl = "SliderControl",
-        INP_Default = 4.0,
-        INP_MinScale = 0.1,
-        INP_MaxScale = 10.0,
+        INP_Default = 0,
+        INP_MinScale = -2000.0,
+        INP_MaxScale = 2000.0,
+    })
+    InMapMax           = self:AddInput("Map Max", "MapMax", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1,
+        INP_MinScale = -2000.0,
+        INP_MaxScale = 2000.0,
     })
 
     Inline1Separator_3 = self:AddInput("line1Separator", "line1Separator_3", {
@@ -102,16 +126,14 @@ function Create()
         INP_External = false,
     })
 
-
-
-    InDotSpeed = self:AddInput("Dot Speed", "Speed", {
+    InDotSpeed         = self:AddInput("Dot Speed", "Speed", {
         LINKID_DataType = "Number",
         INPID_InputControl = "ScrewControl",
         INP_Default = 0.02,
         INP_MinScale = 0.001,
         INP_MaxScale = 0.2,
     })
-    InDotSize = self:AddInput("Dot Size", "Dotsize", {
+    InDotSize          = self:AddInput("Dot Size", "Dotsize", {
         LINKID_DataType = "Number",
         INPID_InputControl = "ScrewControl",
         INP_Default = 0.02,
@@ -119,20 +141,27 @@ function Create()
         INP_MaxScale = 0.2,
     })
 
+    InStrokesize       = self:AddInput("Stroke Size", "Strokesize", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.01,
+        INP_MinScale = 0.001,
+        INP_MaxScale = 0.5,
+    })
     Inline1Separator_4 = self:AddInput("line1Separator", "line1Separator_4", {
         INPID_InputControl = "SeparatorControl",
         IC_Visible = true,
         INP_External = false,
     })
 
-    InShapeScale = self:AddInput("ADSR Shape Scale", "shapescale", {
+    InShapeScale       = self:AddInput("ADSR Shape Scale", "shapescale", {
         LINKID_DataType = "Number",
         INPID_InputControl = "SliderControl",
         INP_Default = 1.0,
         INP_MinScale = 0.0,
         INP_MaxScale = 1.0,
     })
-    InCenter = self:AddInput("ADSR Shape Position", "center", {
+    InCenter           = self:AddInput("ADSR Shape Position", "center", {
         LINKID_DataType      = "Point",
         INPID_InputControl   = "OffsetControl",
         INPID_PreviewControl = "CrosshairControl",
@@ -142,56 +171,47 @@ function Create()
         IC_Visible           = true,
         PC_Visible           = true
     })
-    InShowShape = self:AddInput("Show ADSR Shape", "ShowShape", {
+    InShowShape        = self:AddInput("Show ADSR Shape", "ShowShape", {
         LINKID_DataType = "Number",
         INPID_InputControl = "CheckboxControl",
-        INP_Default = 0.0,
+        INP_Default = 1.0,
         INP_DoNotifyChanged = true,
     })
 
-
-
-
-    InImage = self:AddInput("Input", "Input", {
+    InImage            = self:AddInput("Input", "Input", {
         LINKID_DataType = "Image",
         LINK_Main = 1,
     })
-    OutValue = self:AddOutput("Envelope Output", "Value", {
+    OutValue           = self:AddOutput("Envelope Output", "Value", {
         LINKID_DataType = "Number",
         LINK_Main = 3,
     })
 
-    OutScriptVal = self:AddOutput("ScriptVal Export", "ScriptVal", {
+    OutScriptVal       = self:AddOutput("ScriptVal Export", "ScriptVal", {
         LINKID_DataType = "ScriptVal",
         LINK_Main = 2,
     })
-    OutImage = self:AddOutput("Output", "Output", {
+    OutImage           = self:AddOutput("Output", "Output", {
         LINKID_DataType = "Image",
         LINK_Main = 1,
     })
 end
 
-
 function NotifyChanged(inp, param, time)
-
-     if inp == InShowShape then
-
-         if param.Value == 1 then
-        
-        InCenter:SetAttrs({ IC_Visible = true, PC_Visible = true })
-    else
-         InCenter:SetAttrs({ IC_Visible = false, PC_Visible = false })
-     end
-
- end
-
+    if inp == InShowShape then
+        if param.Value == 1 then
+            InCenter:SetAttrs({ IC_Visible = true, PC_Visible = true })
+        else
+            InCenter:SetAttrs({ IC_Visible = false, PC_Visible = false })
+        end
+    end
 end
-
 
 local dotYpos = 0
 
 -- Shape rendering
-function CreateADSRShape(ic, attack, decay, sustain, release, maxAmplitude, totalTime, currentTime, shapeScale, cx, cy,dotSize,showShape)
+function CreateADSRShape(ic, attack, decay, sustain, release, maxAmplitude, currentTime, shapeScale, cx, cy,
+                         dotSize, showShape, strokesize)
     local segments = {
         { 0,                        0,                  attack,                             maxAmplitude,       1,   0, 1 },
         { attack,                   maxAmplitude,       attack + decay,                     maxAmplitude * 0.7, 1,   0, 0 },
@@ -209,37 +229,34 @@ function CreateADSRShape(ic, attack, decay, sustain, release, maxAmplitude, tota
 
     -- TODO: Add smoothing to the corners
 
-if showShape == 1 then
-    for _, seg in ipairs(segments) do
-        local sh = Shape()
-        sh:MoveTo(seg[1], seg[2])
-        sh:LineTo(seg[3], seg[4])
-        sh = sh:OutlineOfShape(0.01, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
-        ic:ShapeFill(sh:TransformOfShape(mat))
+    if showShape == 1 then
+        for _, seg in ipairs(segments) do
+            local sh = Shape()
+            sh:MoveTo(seg[1], seg[2])
+            sh:LineTo(seg[3], seg[4])
+            sh = sh:OutlineOfShape(strokesize, "OLT_Solid", "OJT_Round", 8, "SWM_Normal", 8)
+            ic:ShapeFill(sh:TransformOfShape(mat))
 
-
-        cs.Color = Pixel { R = seg[5], G = seg[6], B = seg[7], A = 1 }
-        ic:PutToImage("CM_Merge", cs)
-    end
-
-    local dotX, dotY = 0, 0
-    for _, seg in ipairs(segments) do
-        if currentTime >= seg[1] and currentTime <= seg[3] then
-            local t = (currentTime - seg[1]) / (seg[3] - seg[1])
-            dotX = currentTime
-            dotY = seg[2] + (seg[4] - seg[2]) * t
-            dotYpos=dotY
-            break
+            cs.Color = Pixel { R = seg[5], G = seg[6], B = seg[7], A = 1 }
+            ic:PutToImage("CM_Merge", cs)
         end
-    end
 
+        local dotX, dotY = 0, 0
+        for _, seg in ipairs(segments) do
+            if currentTime >= seg[1] and currentTime <= seg[3] then
+                local t = (currentTime - seg[1]) / (seg[3] - seg[1])
+                dotX = currentTime
+                dotY = seg[2] + (seg[4] - seg[2]) * t
+                dotYpos = dotY
+                break
+            end
+        end
 
-    
-    local shDot = createCircleShape(dotX, dotY, dotSize)
-    ic:ShapeFill(shDot:TransformOfShape(mat))
-    
-    cs.Color = Pixel { R = 0, G = 0, B = 1, A = 1 }
-    ic:PutToImage("CM_Merge", cs)
+        local shDot = createCircleShape(dotX, dotY, dotSize)
+        ic:ShapeFill(shDot:TransformOfShape(mat))
+
+        cs.Color = Pixel { R = 1, G = 1, B = 1, A = 1 }
+        ic:PutToImage("CM_Merge", cs)
     end
 end
 
@@ -258,39 +275,25 @@ function createCircleShape(x, y, radius)
     return shape
 end
 
-function createSquareShape(x, y, size)
-    local shape = Shape()
-    local half = size / 2
-    shape:AddRectangle(x - half, x + half, y - half, y + half, 0, 8)
-    return shape
-end
-
-function createTriangleShape(x, y, size)
-    local shape = Shape()
-    local height = size * 0.866 -- equilateral triangle height
-
-    shape:MoveTo(x, y + height / 2)
-    shape:LineTo(x - size / 2, y - height / 2)
-    shape:LineTo(x + size / 2, y - height / 2)
-    shape:Close()
-
-    return shape
-end
-
 function convertY(y, ref_img)
     return y * (ref_img.Height * ref_img.YScale) / (ref_img.Width * ref_img.XScale)
 end
 
+-- Maps a value from [in_min, in_max] to [out_min, out_max]
+function map(value, in_min, in_max, out_min, out_max)
+    return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+end
+
 function Process(req)
-    local img        = InImage:GetValue(req)
-    local out        = img:CopyOf()
+    local img           = InImage:GetValue(req)
+    local out           = img:CopyOf()
 
-
-    local position   = InCenter:GetValue(req)
-    local cx         = position.X
-    local cy         = convertY(position.Y, img)
-    local shapeScale = InShapeScale:GetValue(req).Value
-
+    local position      = InCenter:GetValue(req)
+    local cx            = position.X
+    local cy            = convertY(position.Y, img)
+    local shapeScale    = InShapeScale:GetValue(req).Value
+    local mapMin        = InMapMin:GetValue(req).Value
+    local mapMax        = InMapMax:GetValue(req).Value
 
     local frame         = req.Time
 
@@ -303,15 +306,12 @@ function Process(req)
         + InSustain:GetValue(req).Value
         + InRelease:GetValue(req).Value / 1000
 
-
-    OutValue:Set(req, dotYpos)
+    local mappedDotYpos = map(dotYpos, 0, InMaxAmplitude:GetValue(req).Value, mapMin, mapMax)
+    OutValue:Set(req, mappedDotYpos)
 
     local ic = ImageChannel(out, 8)
-    local fs = FillStyle()
     local cs = ChannelStyle()
-
     local mat = Matrix4()
-
 
     --Shape Rendering
 
@@ -323,14 +323,12 @@ function Process(req)
         InSustain:GetValue(req).Value,
         InRelease:GetValue(req).Value / 1000,
         InMaxAmplitude:GetValue(req).Value,
-        InTotalTime:GetValue(req).Value,
         (frame / fps) * speed,
         shapeScale, cx, cy,
         InDotSize:GetValue(req).Value,
-        InShowShape:GetValue(req).Value
+        InShowShape:GetValue(req).Value,
+        InStrokesize:GetValue(req).Value
     )
-
- 
 
     local attack  = InAttack:GetValue(req).Value / 1000
     local decay   = InDecay:GetValue(req).Value
@@ -352,16 +350,15 @@ function Process(req)
 
     local envTable = {
         phase = phase,
-       -- value = env,
         time = t,
         attack = attack,
         decay = decay,
         sustain = sustain,
         release = release,
-        dotYpos=dotYpos,
+        dotYpos = dotYpos,
+        mappedDotYpos = mappedDotYpos
     }
 
     OutScriptVal:Set(req, ScriptValParam(envTable))
     OutImage:Set(req, out)
-   
 end

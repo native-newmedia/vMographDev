@@ -112,7 +112,8 @@ function Create()
         INPID_InputControl = "ScrewControl",
         INP_MinScale = 0.0,
         INP_MaxScale = 0.5,
-        INP_Default = 0.3,
+        INP_Default = 0.0,
+        INP_MinAllowed = 0.0,
     })
 
     -- Color Controls

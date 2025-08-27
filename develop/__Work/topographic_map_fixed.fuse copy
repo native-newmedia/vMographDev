@@ -282,7 +282,7 @@ function Process(req)
 
     -- Build heightmap with fractal noise
     -- Get current time for animation
-    local time = InTime:GetValue(req).Value
+    local time = req.Time * InTime:GetValue(req).Value
     local speed = InAnimSpeed:GetValue(req).Value
 
     local heightmap = {}
@@ -295,13 +295,10 @@ function Process(req)
 
     -- Generate contour lines using marching squares (normalized coordinates)
     local numLevels = math.floor(1.0 / contourStep)
-    local allSegments = {}
-    local pointSet = {}  -- To track unique points and avoid duplicates
-    local resultTableGroups = {}
+    local allSegments = {} -- Collect all segments as pairs of points
 
     for i = 1, numLevels do
         local level = i * contourStep
-
 
         -- Process each grid cell
         for y = 1, height - 1 do
@@ -314,33 +311,77 @@ function Process(req)
                 local segments = getContourSegments(x, y, tl, tr, bl, br, level, width, height)
 
                 for _, segment in ipairs(segments) do
-
-
                     if segment[1] and segment[2] then
-                        -- Create unique keys for points to avoid duplicates
-                        local key1 = string.format("%.6f,%.6f", segment[1][1], segment[1][2])
-                        local key2 = string.format("%.6f,%.6f", segment[2][1], segment[2][2])
-                        
-                        -- Add first point if not already present
-                        if not pointSet[key1] then
-                            pointSet[key1] = true
-                            table.insert(allSegments, { segment[1][1], segment[1][2], 0 })
-                        end
-                        
-                        -- Add second point if not already present
-                        if not pointSet[key2] then
-                            pointSet[key2] = true
-                            table.insert(allSegments, { segment[2][1], segment[2][2], 0 })
-                        end
-
-
+                        -- Store each segment as a pair of points
+                        table.insert(allSegments, { segment[1], segment[2] })
                     end
                 end
             end
         end
     end
-    --table.insert(resultTableGroups, #pointSet)
-    OutScriptValGroups:Set(req, ScriptValParam(resultTableGroups))
 
-    OutScriptVal:Set(req, ScriptValParam(allSegments))
+    -- Output all contour points (flattened for compatibility)
+    local flatPoints = {}
+    for _, segment in ipairs(allSegments) do
+        table.insert(flatPoints, { segment[1][1], segment[1][2], 0 })
+        table.insert(flatPoints, { segment[2][1], segment[2][2], 0 })
+    end
+    OutScriptVal:Set(req, ScriptValParam(flatPoints))
+
+    -- Helper: create a key for a point
+    local function pointKey(pt)
+        return string.format("%.6f,%.6f", pt[1], pt[2])
+    end
+
+    -- Build connectivity graph
+    local edges = {} -- key: pointKey, value: list of connected pointKeys
+
+    for _, segment in ipairs(allSegments) do
+        local k1 = pointKey(segment[1])
+        local k2 = pointKey(segment[2])
+        edges[k1] = edges[k1] or {}
+        edges[k2] = edges[k2] or {}
+        table.insert(edges[k1], k2)
+        table.insert(edges[k2], k1)
+    end
+
+    -- Trace groups
+    local visited = {}
+    local groups = {}
+
+    for k, _ in pairs(edges) do
+        if not visited[k] then
+            local group = {}
+            local stack = { k }
+            visited[k] = true
+            while #stack > 0 do
+                local curr = table.remove(stack)
+                table.insert(group, curr)
+                for _, neighbor in ipairs(edges[curr]) do
+                    if not visited[neighbor] then
+                        visited[neighbor] = true
+                        table.insert(stack, neighbor)
+                    end
+                end
+            end
+            table.insert(groups, group)
+        end
+    end
+
+    -- Convert group keys to coordinates
+    local function keyToCoord(key)
+        local x, y = key:match("([^,]+),([^,]+)")
+        return { tonumber(x), tonumber(y), 0 }
+    end
+
+    local groupsCoords = {}
+    for _, group in ipairs(groups) do
+        local coords = {}
+        for _, key in ipairs(group) do
+            table.insert(coords, keyToCoord(key))
+        end
+        table.insert(groupsCoords, coords)
+    end
+
+    OutScriptValGroups:Set(req, ScriptValParam(groupsCoords))
 end
